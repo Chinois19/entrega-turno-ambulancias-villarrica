@@ -1,12 +1,21 @@
-import React, { useState } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { Ambulance, Lock, User, ArrowRight, ShieldCheck, HeartPulse } from 'lucide-react';
-import { formatRut } from '../utils/authUtils';
+import React, { useState } from "react";
+import { useAuth } from "../context/AuthContext";
+import {
+  Ambulance,
+  Lock,
+  User,
+  ArrowRight,
+  ShieldCheck,
+  HeartPulse,
+  Wifi,
+  WifiOff,
+} from "lucide-react";
+import { formatRut } from "../utils/authUtils";
 
 export const LoginView: React.FC = () => {
   const { login } = useAuth();
-  const [rutOEmail, setRutOEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [credential, setCredential] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -14,48 +23,26 @@ export const LoginView: React.FC = () => {
     e.preventDefault();
     setError(null);
     setLoading(true);
-
-    const res = await login(rutOEmail, password);
+    const res = await login(credential, password);
     setLoading(false);
-
     if (!res.success) {
       setError(res.error || "Error al iniciar sesión.");
     }
   };
 
-  const handleRutChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCredentialChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    if (val.includes('@')) {
-      setRutOEmail(val);
+    // If it looks like an email, don't auto-format
+    if (val.includes("@")) {
+      setCredential(val);
     } else {
-      setRutOEmail(formatRut(val));
-    }
-  };
-
-  const fillQuickAccess = (role: 'calidad' | 'transporte' | 'conductor' | 'tens') => {
-    switch (role) {
-      case 'calidad':
-        setRutOEmail('calidad@hospitalvillarrica.cl');
-        setPassword('123456');
-        break;
-      case 'transporte':
-        setRutOEmail('transporte@hospitalvillarrica.cl');
-        setPassword('123456');
-        break;
-      case 'conductor':
-        setRutOEmail('11.111.111-1');
-        setPassword('123456');
-        break;
-      case 'tens':
-        setRutOEmail('12.876.543-2');
-        setPassword('123456');
-        break;
+      setCredential(formatRut(val));
     }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-sky-950 to-slate-900 flex flex-col items-center justify-center p-4">
-      {/* Background Glow */}
+      {/* Background glow */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-sky-500/10 rounded-full blur-3xl pointer-events-none" />
 
       <div className="max-w-md w-full relative z-10">
@@ -80,27 +67,30 @@ export const LoginView: React.FC = () => {
         <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl p-7 border border-white/20">
           <h2 className="text-lg font-bold text-slate-800 mb-1">Iniciar Sesión</h2>
           <p className="text-xs text-slate-500 mb-5">
-            Ingresa con tu RUN institucional o correo electrónico
+            Ingresa con tu correo electrónico institucional o RUT
           </p>
 
           {error && (
-            <div className="mb-4 p-3 text-xs bg-red-50 text-red-700 rounded-xl border border-red-200">
-              {error}
+            <div className="mb-4 p-3 text-xs bg-red-50 text-red-700 rounded-xl border border-red-200 flex items-start gap-2">
+              <span className="mt-0.5 text-red-500">⚠</span>
+              <span>{error}</span>
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                RUT o Correo Electrónico
+                Correo o RUT institucional
               </label>
               <div className="relative">
                 <input
+                  id="login-credential"
                   type="text"
                   required
-                  value={rutOEmail}
-                  onChange={handleRutChange}
-                  placeholder="Ej: 11.111.111-1 o usuario@hospitalvillarrica.cl"
+                  autoComplete="username"
+                  value={credential}
+                  onChange={handleCredentialChange}
+                  placeholder="correo@hospitalvillarrica.cl o 12.345.678-9"
                   className="w-full px-3.5 py-2.5 pl-10 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent text-sm bg-white text-slate-800"
                 />
                 <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
@@ -113,10 +103,12 @@ export const LoginView: React.FC = () => {
               </label>
               <div className="relative">
                 <input
+                  id="login-password"
                   type="password"
                   required
+                  autoComplete="current-password"
                   value={password}
-                  onChange={e => setPassword(e.target.value)}
+                  onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   className="w-full px-3.5 py-2.5 pl-10 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent text-sm bg-white text-slate-800"
                 />
@@ -129,49 +121,20 @@ export const LoginView: React.FC = () => {
               disabled={loading}
               className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-sky-600 to-cyan-600 hover:from-sky-700 hover:to-cyan-700 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-sky-600/25 active:scale-[0.99] disabled:opacity-50"
             >
-              <span>{loading ? "Accediendo..." : "Ingresar al Sistema"}</span>
+              <span>{loading ? "Verificando con Firebase..." : "Ingresar al Sistema"}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
 
-          {/* Quick Demo Access Bar */}
-          <div className="mt-6 pt-5 border-t border-slate-100">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2 text-center">
-              Acceso Rápido por Perfil (Demo)
-            </span>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => fillQuickAccess('conductor')}
-                className="p-2 rounded-lg bg-slate-50 hover:bg-sky-50 text-slate-700 hover:text-sky-700 font-semibold border border-slate-200 text-left transition-colors"
-              >
-                🚑 Conductor
-                <span className="block text-[10px] text-slate-400 font-normal">Víctor Lazo (Clave Prov.)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => fillQuickAccess('tens')}
-                className="p-2 rounded-lg bg-slate-50 hover:bg-sky-50 text-slate-700 hover:text-sky-700 font-semibold border border-slate-200 text-left transition-colors"
-              >
-                🩺 TENS
-                <span className="block text-[10px] text-slate-400 font-normal">Camila Soto</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => fillQuickAccess('transporte')}
-                className="p-2 rounded-lg bg-slate-50 hover:bg-sky-50 text-slate-700 hover:text-sky-700 font-semibold border border-slate-200 text-left transition-colors"
-              >
-                🚗 Transporte
-                <span className="block text-[10px] text-slate-400 font-normal">Roberto Zambrano</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => fillQuickAccess('calidad')}
-                className="p-2 rounded-lg bg-slate-50 hover:bg-sky-50 text-slate-700 hover:text-sky-700 font-semibold border border-slate-200 text-left transition-colors"
-              >
-                ⭐ Calidad
-                <span className="block text-[10px] text-slate-400 font-normal">Dra. Marcela Lagos</span>
-              </button>
+          {/* Security notice */}
+          <div className="mt-5 pt-4 border-t border-slate-100">
+            <div className="flex items-center gap-2 text-[11px] text-slate-400">
+              <Wifi className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+              <span>
+                Autenticación segura vía <strong className="text-slate-600">Firebase Auth</strong>.
+                Las credenciales nunca se almacenan en el navegador. El sistema funciona con red
+                inestable gracias a la persistencia offline.
+              </span>
             </div>
           </div>
         </div>

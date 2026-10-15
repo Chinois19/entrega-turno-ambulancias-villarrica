@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { TurnoEntrega, Ambulancia, Novedad } from '../types';
-import { getTurnos, getAmbulancias, getNovedades } from '../firebase/firestoreService';
+import { subscribeTurnos, subscribeAmbulancias, subscribeNovedades } from '../firebase/firestoreService';
 import { 
   BarChart3, 
   Clock, 
@@ -12,7 +12,8 @@ import {
   Download, 
   Search,
   ExternalLink,
-  ShieldCheck
+  ShieldCheck,
+  Radio
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 
@@ -22,17 +23,27 @@ export const DashboardGestionView: React.FC = () => {
   const [novedades, setNovedades] = useState<Novedad[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroEstado, setFiltroEstado] = useState<string>('todos');
+  const [online, setOnline] = useState(navigator.onLine);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    // Real-time listeners — unsubscribe on unmount
+    const unsubTurnos = subscribeTurnos(setTurnos);
+    const unsubAmbulancias = subscribeAmbulancias(setAmbulancias);
+    const unsubNovedades = subscribeNovedades(setNovedades);
 
-  const loadData = async () => {
-    const [t, a, n] = await Promise.all([getTurnos(), getAmbulancias(), getNovedades()]);
-    setTurnos(t);
-    setAmbulancias(a);
-    setNovedades(n);
-  };
+    const handleOnline = () => setOnline(true);
+    const handleOffline = () => setOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      unsubTurnos();
+      unsubAmbulancias();
+      unsubNovedades();
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   // Turnos incompletos (solo conductor o solo TENS)
   const turnosPendientes = turnos.filter(t => t.estado === 'pendiente_tens' || t.estado === 'pendiente_conductor');
@@ -177,6 +188,14 @@ export const DashboardGestionView: React.FC = () => {
           <p className="text-sm text-sky-200/80 mt-1">
             Supervisión transversal de entregas de turno, turnos pendientes y expedientes de acreditación
           </p>
+        </div>
+        <div className="flex flex-col items-end gap-2">
+          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${
+            online ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30' : 'bg-amber-500/20 text-amber-300 border-amber-400/30'
+          }`}>
+            <Radio className="w-3.5 h-3.5" />
+            {online ? 'Tiempo Real · Firestore' : 'Modo Offline · Cache local'}
+          </div>
         </div>
       </div>
 

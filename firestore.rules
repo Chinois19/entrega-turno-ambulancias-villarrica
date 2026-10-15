@@ -1,0 +1,111 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper Functions ─────────────────────────────────────────────────────
+
+    // Requires Firebase Auth session (JWT token) — never just localStorage
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Reads the caller's profile from Firestore to check their role
+    function getUserProfile() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    // Checks if the authenticated user has one of the given roles and is active
+    function hasRole(roles) {
+      return isAuthenticated()
+        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        && getUserProfile().rol in roles
+        && getUserProfile().activo == true;
+    }
+
+    function isAdmin() {
+      return (request.auth != null && request.auth.token.email == 'gonzalop14@gmail.com') || hasRole(['admin']);
+    }
+
+    function isConductor() {
+      return hasRole(['conductor', 'admin']) || isAdmin();
+    }
+
+    function isTens() {
+      return hasRole(['tens', 'admin']) || isAdmin();
+    }
+
+    function isCalidadOrTransporte() {
+      return hasRole(['calidad', 'transporte', 'admin']) || isAdmin();
+    }
+
+    function isOperativo() {
+      return hasRole(['conductor', 'tens', 'calidad', 'transporte', 'admin']) || isAdmin();
+    }
+
+    // ─── Colección: usuarios ──────────────────────────────────────────────────
+    match /usuarios/{uid} {
+      // Users can read their own profile; admins can read all
+      allow read: if isAuthenticated() && (request.auth.uid == uid || isAdmin());
+
+      // Admin can create any profile; or an authenticated user can initialize their own profile
+      allow create: if isAuthenticated() && (isAdmin() || request.auth.uid == uid);
+
+      // Only admin can update profiles
+      allow update: if isAdmin();
+
+      // Nobody can delete users (deactivate instead via activo=false)
+      allow delete: if false;
+    }
+
+    // ─── Colección: ambulancias ───────────────────────────────────────────────
+    match /ambulancias/{patente} {
+      // All authenticated and active users can read the fleet
+      allow read: if isOperativo();
+
+      // Only Transporte or Admin can update/create ambulancias
+      allow create, update: if hasRole(['transporte', 'admin']);
+
+      // No deletion
+      allow delete: if false;
+    }
+
+    // ─── Colección: entregas_turno ────────────────────────────────────────────
+    match /entregas_turno/{folioId} {
+      // All authenticated users can read turnos (TENS needs to link to existing ones)
+      allow read: if isOperativo();
+
+      // Conductores or TENS can create a new turno document
+      allow create: if isConductor() || isTens();
+
+      // Conductores, TENS, and Calidad/Transporte can update a turno
+      // (merge:true in the app prevents one role from overwriting the other's data)
+      allow update: if isConductor() || isTens() || isCalidadOrTransporte();
+
+      // No deletion
+      allow delete: if false;
+    }
+
+    // ─── Colección: novedades ─────────────────────────────────────────────────
+    match /novedades/{novedadId} {
+      // All authenticated users can read novedades
+      allow read: if isOperativo();
+
+      // Conductores and TENS can report new novedades
+      allow create: if isConductor() || isTens();
+
+      // Only Calidad/Transporte/Admin can update status (not conductores or TENS)
+      allow update: if isCalidadOrTransporte();
+
+      // No deletion
+      allow delete: if false;
+
+      // Acciones subcollection — append-only trazabilidad
+      match /acciones/{accionId} {
+        allow read: if isOperativo();
+        allow create: if isCalidadOrTransporte();
+        // Actions cannot be modified or deleted — immutable audit trail
+        allow update, delete: if false;
+      }
+    }
+  }
+}

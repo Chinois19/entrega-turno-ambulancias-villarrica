@@ -1,110 +1,202 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { AppUser, UserRole } from '../types';
-import { getUsuarios, updateUsuarioPassword } from '../firebase/firestoreService';
-import { sha256Hash } from '../utils/authUtils';
+import React, { createContext, useContext, useState, useEffect } from "react";
+import {
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  updatePassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  User as FirebaseUser,
+} from "firebase/auth";
+import { auth } from "../firebase/config";
+import { AppUser, UserRole } from "../types";
+import {
+  getUsuarioByUid,
+  getUsuarioByEmail,
+  updateUltimoAcceso,
+  updateIsTemporaryPassword,
+  seedAmbulanciasIfEmpty,
+  saveUsuario,
+} from "../firebase/firestoreService";
 
 interface AuthContextType {
   currentUser: AppUser | null;
+  firebaseUser: FirebaseUser | null;
   loading: boolean;
-  login: (rutOEmail: string, contrasena: string) => Promise<{ success: boolean; error?: string }>;
-  logout: () => void;
-  changePassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
+  login: (emailOrRut: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   hasRole: (roles: UserRole[]) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-const SESSION_KEY = 'villarrica_active_session';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
+  const [loading, setLoading] = useState(true);
 
+  // ─── Subscribe to Firebase Auth state ─────────────────────────────────────
+  // This is the ONLY source of truth for authentication.
+  // No localStorage session — Firebase manages secure JWT tokens internally.
   useEffect(() => {
-    // Restore session
-    const saved = localStorage.getItem(SESSION_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as AppUser;
-        setCurrentUser(parsed);
-      } catch (e) {
-        localStorage.removeItem(SESSION_KEY);
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      setFirebaseUser(fbUser);
+      if (fbUser) {
+        try {
+          let profile = await getUsuarioByUid(fbUser.uid);
+          // Auto-provision Super Admin if owner logs in for the first time
+          if (!profile && fbUser.email === "gonzalop14@gmail.com") {
+            const adminUser: AppUser = {
+              id: fbUser.uid,
+              email: fbUser.email,
+              nombre: "Gonzalo Pérez (Administrador)",
+              rut: "1-9",
+              rol: "admin",
+              cargo: "Administrador del Sistema y TI",
+              activo: true,
+              isTemporaryPassword: false,
+              creadoEn: new Date().toISOString(),
+            };
+            await saveUsuario(adminUser);
+            profile = adminUser;
+          }
+
+          if (profile && profile.activo) {
+            setCurrentUser(profile);
+            // Async fire-and-forget: update last access timestamp
+            updateUltimoAcceso(fbUser.uid).catch(() => {});
+            // Seed fleet if empty once authenticated
+            seedAmbulanciasIfEmpty().catch(() => {});
+          } else {
+            // Profile not found or inactive — sign out silently
+            await signOut(auth);
+            setCurrentUser(null);
+          }
+        } catch (err) {
+          console.error("Error loading user profile:", err);
+          setCurrentUser(null);
+        }
+      } else {
+        setCurrentUser(null);
       }
-    }
-    setLoading(false);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  const login = async (rutOEmail: string, contrasena: string): Promise<{ success: boolean; error?: string }> => {
+  // ─── Login ─────────────────────────────────────────────────────────────────
+  // Accepts email directly (or email resolved from RUT lookup in Firestore).
+  const login = async (
+    emailOrRut: string,
+    password: string
+  ): Promise<{ success: boolean; error?: string }> => {
     try {
-      const users = await getUsuarios();
-      const cleanInput = rutOEmail.trim().toLowerCase();
-      
-      // Look up user by email or RUT
-      const user = users.find(u => 
-        u.email.toLowerCase() === cleanInput || 
-        u.rut.replace(/[^0-9kK]/g, '').toLowerCase() === cleanInput.replace(/[^0-9kK]/g, '').toLowerCase()
-      );
+      const input = emailOrRut.trim().toLowerCase();
+      let email = input;
 
-      if (!user) {
-        return { success: false, error: "Usuario o RUT no encontrado en el sistema." };
+      // If input is not an email (no @), look up the email from Firestore by RUT
+      if (!input.includes("@")) {
+        const profile = await getUsuarioByEmail(input).catch(() => null);
+        if (!profile) {
+          // Try RUT-based lookup: strip formatting and query
+          const allUsers = await import("../firebase/firestoreService").then(
+            (m) => m.getUsuarios()
+          );
+          const cleanInput = input.replace(/[^0-9kK]/gi, "").toLowerCase();
+          const found = allUsers.find(
+            (u) => u.rut.replace(/[^0-9kK]/gi, "").toLowerCase() === cleanInput
+          );
+          if (!found) {
+            return { success: false, error: "RUT o correo no encontrado en el sistema." };
+          }
+          email = found.email;
+        } else {
+          email = profile.email;
+        }
       }
 
-      if (!user.activo) {
-        return { success: false, error: "Esta cuenta se encuentra inactiva. Contacte al encargado de calidad o transporte." };
-      }
-
-      // Hash input password with SHA-256
-      const hash = await sha256Hash(contrasena);
-      if (hash !== user.passwordHash) {
-        return { success: false, error: "Contraseña incorrecta." };
-      }
-
-      // Successful login
-      user.ultimoAcceso = new Date().toISOString();
-      setCurrentUser(user);
-      localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+      await signInWithEmailAndPassword(auth, email, password);
+      // onAuthStateChanged will handle loading the profile
       return { success: true };
     } catch (err: any) {
+      const code = err.code || "";
+      if (code === "auth/user-not-found" || code === "auth/invalid-credential") {
+        return { success: false, error: "Credenciales incorrectas. Verifique su RUT/correo y contraseña." };
+      }
+      if (code === "auth/wrong-password") {
+        return { success: false, error: "Contraseña incorrecta." };
+      }
+      if (code === "auth/too-many-requests") {
+        return { success: false, error: "Demasiados intentos fallidos. Intente más tarde." };
+      }
+      if (code === "auth/user-disabled") {
+        return { success: false, error: "Esta cuenta está deshabilitada. Contacte al encargado." };
+      }
       return { success: false, error: err.message || "Error al autenticar." };
     }
   };
 
-  const logout = () => {
+  // ─── Logout ────────────────────────────────────────────────────────────────
+  const logout = async () => {
+    await signOut(auth);
     setCurrentUser(null);
-    localStorage.removeItem(SESSION_KEY);
+    setFirebaseUser(null);
   };
 
-  const changePassword = async (newPassword: string): Promise<{ success: boolean; error?: string }> => {
-    if (!currentUser) return { success: false, error: "No hay sesión activa." };
-    if (newPassword.length < 6) {
-      return { success: false, error: "La nueva contraseña debe tener al menos 6 caracteres." };
+  // ─── Change Password ───────────────────────────────────────────────────────
+  // Requires reauthentication with current password for security.
+  const changePassword = async (
+    currentPassword: string,
+    newPassword: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!firebaseUser || !currentUser) {
+      return { success: false, error: "No hay sesión activa." };
     }
-
+    if (newPassword.length < 8) {
+      return { success: false, error: "La nueva contraseña debe tener al menos 8 caracteres." };
+    }
     try {
-      const newHash = await sha256Hash(newPassword);
-      await updateUsuarioPassword(currentUser.id, newHash);
-      
-      const updatedUser: AppUser = {
-        ...currentUser,
-        passwordHash: newHash,
-        isTemporaryPassword: false
-      };
-      
-      setCurrentUser(updatedUser);
-      localStorage.setItem(SESSION_KEY, JSON.stringify(updatedUser));
+      // Reauthenticate before sensitive operation
+      const credential = EmailAuthProvider.credential(
+        firebaseUser.email!,
+        currentPassword
+      );
+      await reauthenticateWithCredential(firebaseUser, credential);
+
+      // Update password in Firebase Auth
+      await updatePassword(firebaseUser, newPassword);
+
+      // Mark isTemporaryPassword = false in Firestore
+      await updateIsTemporaryPassword(currentUser.id, false);
+
+      // Update local state
+      setCurrentUser((prev) =>
+        prev ? { ...prev, isTemporaryPassword: false } : prev
+      );
+
       return { success: true };
     } catch (err: any) {
-      return { success: false, error: err.message || "Error al actualizar contraseña." };
+      const code = err.code || "";
+      if (code === "auth/wrong-password" || code === "auth/invalid-credential") {
+        return { success: false, error: "La contraseña actual es incorrecta." };
+      }
+      return { success: false, error: err.message || "Error al cambiar contraseña." };
     }
   };
 
+  // ─── Role check ────────────────────────────────────────────────────────────
   const hasRole = (roles: UserRole[]): boolean => {
     if (!currentUser) return false;
-    if (currentUser.rol === 'admin') return true;
+    if (currentUser.rol === "admin") return true;
     return roles.includes(currentUser.rol);
   };
 
   return (
-    <AuthContext.Provider value={{ currentUser, loading, login, logout, changePassword, hasRole }}>
+    <AuthContext.Provider
+      value={{ currentUser, firebaseUser, loading, login, logout, changePassword, hasRole }}
+    >
       {children}
     </AuthContext.Provider>
   );

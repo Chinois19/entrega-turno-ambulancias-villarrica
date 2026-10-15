@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { AppUser, UserRole } from '../types';
 import { getUsuarios, saveUsuario } from '../firebase/firestoreService';
-import { 
-  sha256Hash, 
-  generateTemporaryPassword, 
-  validateRut, 
-  formatRut 
-} from '../utils/authUtils';
+import { validateRut, formatRut } from '../utils/authUtils';
+import {
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+} from 'firebase/auth';
+import { auth } from '../firebase/config';
 import { 
   Users, 
   UserPlus, 
@@ -17,7 +17,8 @@ import {
   Copy, 
   AlertCircle,
   Mail,
-  UserCheck
+  UserCheck,
+  RefreshCcw
 } from 'lucide-react';
 
 export const MantenedorUsuariosView: React.FC = () => {
@@ -63,25 +64,33 @@ export const MantenedorUsuariosView: React.FC = () => {
     setErrorMsg(null);
 
     if (!validateRut(rut)) {
-      setErrorMsg("El RUN ingresado no es válido (Verificación Módulo 11).");
+      setErrorMsg('El RUN ingresado no es válido (Verificación Módulo 11).');
+      return;
+    }
+    if (!email.includes('@')) {
+      setErrorMsg('El correo electrónico no es válido.');
       return;
     }
 
     setSaving(true);
     try {
-      const tempPass = generateTemporaryPassword();
-      const hash = await sha256Hash(tempPass);
+      // 1. Generate a temporary password
+      const tempPass = `Villarrica-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
       const cleanRut = formatRut(rut);
 
+      // 2. Create account in Firebase Auth
+      const credential = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), tempPass);
+      const uid = credential.user.uid;
+
+      // 3. Create Firestore profile with UID as document ID
       const newUser: AppUser = {
-        id: cleanRut,
+        id: uid,
         nombre: nombre.trim(),
         rut: cleanRut,
         email: email.trim().toLowerCase(),
-        rol: rol,
+        rol,
         cargo: cargo.trim() || undefined,
-        passwordHash: hash,
-        isTemporaryPassword: true, // Forzar cambio en primer inicio
+        isTemporaryPassword: true,
         activo: true,
         creadoEn: new Date().toISOString()
       };
@@ -90,28 +99,28 @@ export const MantenedorUsuariosView: React.FC = () => {
       await loadUsuarios();
       setGeneratedPassword(tempPass);
     } catch (err: any) {
-      setErrorMsg(err.message || "Error al crear el usuario.");
+      if (err.code === 'auth/email-already-in-use') {
+        setErrorMsg('Este correo ya tiene una cuenta en Firebase Auth.');
+      } else {
+        setErrorMsg(err.message || 'Error al crear el usuario.');
+      }
     } finally {
       setSaving(false);
     }
   };
 
+
   const handleResetPassword = async (u: AppUser) => {
-    const confirm = window.confirm(`¿Generar nueva contraseña provisoria para ${u.nombre}?`);
-    if (!confirm) return;
-
-    const tempPass = generateTemporaryPassword();
-    const hash = await sha256Hash(tempPass);
-    
-    const updatedUser: AppUser = {
-      ...u,
-      passwordHash: hash,
-      isTemporaryPassword: true
-    };
-
-    await saveUsuario(updatedUser);
-    await loadUsuarios();
-    alert(`Contraseña provisoria para ${u.nombre}:\n\n${tempPass}\n\nEl funcionario deberá cambiarla obligatoriamente al iniciar sesión.`);
+    if (!window.confirm(`¿Enviar correo de restablecimiento de contraseña a ${u.nombre} (${u.email})?`)) return;
+    try {
+      await sendPasswordResetEmail(auth, u.email);
+      // Mark as temporary so the app asks to change on next login
+      await saveUsuario({ ...u, isTemporaryPassword: true });
+      await loadUsuarios();
+      alert(`✅ Correo de restablecimiento enviado a ${u.email}.\n\nEl funcionario debe revisar su bandeja y seguir el enlace de Firebase para definir su nueva contraseña.`);
+    } catch (err: any) {
+      alert(`Error al enviar correo de restablecimiento: ${err.message}`);
+    }
   };
 
   const handleToggleActivo = async (u: AppUser) => {

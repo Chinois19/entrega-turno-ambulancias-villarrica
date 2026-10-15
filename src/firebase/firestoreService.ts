@@ -1,200 +1,254 @@
-import { 
-  collection, 
-  doc, 
-  getDocs, 
-  getDoc, 
-  setDoc, 
-  updateDoc, 
-  query, 
-  orderBy 
-} from 'firebase/firestore';
-import { db, isFirebaseConfigured } from './config';
-import { AppUser, Ambulancia, TurnoEntrega, Novedad } from '../types';
-import { USUARIOS_INICIALES, AMBULANCIAS_INICIALES } from '../data/seedData';
+import {
+  collection,
+  doc,
+  getDocs,
+  getDoc,
+  setDoc,
+  updateDoc,
+  addDoc,
+  query,
+  orderBy,
+  onSnapshot,
+  serverTimestamp,
+  Timestamp,
+  where,
+  writeBatch,
+} from "firebase/firestore";
+import {
+  ref as storageRef,
+  uploadString,
+  getDownloadURL,
+} from "firebase/storage";
+import { db, storage } from "./config";
+import { AppUser, Ambulancia, TurnoEntrega, Novedad } from "../types";
+import { AMBULANCIAS_INICIALES } from "../data/seedData";
 
-// Local storage keys for hybrid offline/development fallback
-const USERS_STORAGE_KEY = 'villarrica_users_db';
-const AMBULANCIAS_STORAGE_KEY = 'villarrica_ambulancias_db';
-const TURNOS_STORAGE_KEY = 'villarrica_turnos_db';
-const NOVEDADES_STORAGE_KEY = 'villarrica_novedades_db';
-
-// Initialize local store if empty
-function initializeLocalFallback() {
-  if (!localStorage.getItem(USERS_STORAGE_KEY)) {
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(USUARIOS_INICIALES));
-  }
-  if (!localStorage.getItem(AMBULANCIAS_STORAGE_KEY)) {
-    localStorage.setItem(AMBULANCIAS_STORAGE_KEY, JSON.stringify(AMBULANCIAS_INICIALES));
-  }
-  if (!localStorage.getItem(TURNOS_STORAGE_KEY)) {
-    localStorage.setItem(TURNOS_STORAGE_KEY, JSON.stringify([]));
-  }
-  if (!localStorage.getItem(NOVEDADES_STORAGE_KEY)) {
-    localStorage.setItem(NOVEDADES_STORAGE_KEY, JSON.stringify([]));
-  }
+// ─── Type guard ───────────────────────────────────────────────────────────────
+function isNonEmpty(val: unknown): boolean {
+  if (val === null || val === undefined) return false;
+  if (typeof val === "string") return val.trim().length > 0;
+  return true;
 }
 
-// ---------------- USER MANAGEMENT ---------------- //
+// ─── Signature upload to Firebase Storage ─────────────────────────────────────
+// Stores the base64 PNG in Storage and returns the public download URL.
+// This keeps Firestore documents lean (no embedded large strings).
+export async function uploadSignature(
+  folioId: string,
+  role: "conductor_saliente" | "conductor_entrante" | "tens_saliente" | "tens_entrante",
+  base64DataUrl: string
+): Promise<string> {
+  if (!base64DataUrl || base64DataUrl.length < 50) return "";
+  const path = `firmas/${folioId}/${role}.png`;
+  const sRef = storageRef(storage, path);
+  await uploadString(sRef, base64DataUrl, "data_url");
+  return await getDownloadURL(sRef);
+}
 
+// ─── Seed ambulancias if empty ────────────────────────────────────────────────
+export async function seedAmbulanciasIfEmpty(): Promise<void> {
+  const snap = await getDocs(collection(db, "ambulancias"));
+  if (!snap.empty) return;
+  const batch = writeBatch(db);
+  for (const amb of AMBULANCIAS_INICIALES) {
+    batch.set(doc(db, "ambulancias", amb.patente), amb);
+  }
+  await batch.commit();
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// USUARIOS
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Get all users from Firestore.
+ * Auth context uses this to load profiles after Firebase Auth login.
+ */
 export async function getUsuarios(): Promise<AppUser[]> {
-  initializeLocalFallback();
-  if (isFirebaseConfigured) {
-    try {
-      const q = query(collection(db, 'app_users'));
-      const snapshot = await getDocs(q);
-      if (!snapshot.empty) {
-        return snapshot.docs.map(d => d.data() as AppUser);
-      }
-    } catch (err) {
-      console.warn("Error leyendo Firestore, usando fallback local:", err);
-    }
-  }
-  return JSON.parse(localStorage.getItem(USERS_STORAGE_KEY) || '[]');
+  const snap = await getDocs(collection(db, "usuarios"));
+  return snap.docs.map((d) => d.data() as AppUser);
 }
 
+/**
+ * Get a single user profile by Firebase Auth UID.
+ */
+export async function getUsuarioByUid(uid: string): Promise<AppUser | null> {
+  const snap = await getDoc(doc(db, "usuarios", uid));
+  if (!snap.exists()) return null;
+  return snap.data() as AppUser;
+}
+
+/**
+ * Get a single user profile by email (for login fallback lookup).
+ */
+export async function getUsuarioByEmail(email: string): Promise<AppUser | null> {
+  const q = query(collection(db, "usuarios"), where("email", "==", email.toLowerCase()));
+  const snap = await getDocs(q);
+  if (snap.empty) return null;
+  return snap.docs[0].data() as AppUser;
+}
+
+/**
+ * Save (upsert) a user profile in Firestore.
+ * ID must be the Firebase Auth UID.
+ */
 export async function saveUsuario(usuario: AppUser): Promise<void> {
-  initializeLocalFallback();
-  // Update local storage
-  const users = await getUsuarios();
-  const existingIdx = users.findIndex(u => u.id === usuario.id || u.rut === usuario.rut || u.email === usuario.email);
-  if (existingIdx >= 0) {
-    users[existingIdx] = usuario;
-  } else {
-    users.push(usuario);
-  }
-  localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
-
-  // Sync to Firestore if configured
-  if (isFirebaseConfigured) {
-    try {
-      await setDoc(doc(db, 'app_users', usuario.id), usuario);
-    } catch (err) {
-      console.warn("Error escribiendo en Firestore app_users:", err);
-    }
-  }
+  // Strip passwordHash before writing — credentials live in Firebase Auth only
+  const { passwordHash: _stripped, ...safeData } = usuario as AppUser & { passwordHash?: string };
+  await setDoc(doc(db, "usuarios", usuario.id), {
+    ...safeData,
+    actualizadoEn: serverTimestamp(),
+  }, { merge: true });
 }
 
-export async function updateUsuarioPassword(userId: string, newHash: string): Promise<void> {
-  const users = await getUsuarios();
-  const user = users.find(u => u.id === userId);
-  if (user) {
-    user.passwordHash = newHash;
-    user.isTemporaryPassword = false;
-    await saveUsuario(user);
-  }
+/**
+ * Mark user's last access timestamp.
+ */
+export async function updateUltimoAcceso(uid: string): Promise<void> {
+  await updateDoc(doc(db, "usuarios", uid), {
+    ultimoAcceso: serverTimestamp(),
+  });
 }
 
-// ---------------- AMBULANCIAS MANAGEMENT ---------------- //
+/**
+ * Update isTemporaryPassword flag (after user sets their own password).
+ */
+export async function updateIsTemporaryPassword(uid: string, value: boolean): Promise<void> {
+  await updateDoc(doc(db, "usuarios", uid), {
+    isTemporaryPassword: value,
+    actualizadoEn: serverTimestamp(),
+  });
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// AMBULANCIAS
+// ──────────────────────────────────────────────────────────────────────────────
 
 export async function getAmbulancias(): Promise<Ambulancia[]> {
-  initializeLocalFallback();
-  if (isFirebaseConfigured) {
-    try {
-      const snapshot = await getDocs(collection(db, 'ambulancias'));
-      if (!snapshot.empty) {
-        return snapshot.docs.map(d => d.data() as Ambulancia);
-      }
-    } catch (err) {
-      console.warn("Error leyendo Firestore ambulancias:", err);
-    }
-  }
-  return JSON.parse(localStorage.getItem(AMBULANCIAS_STORAGE_KEY) || '[]');
+  const snap = await getDocs(collection(db, "ambulancias"));
+  return snap.docs.map((d) => d.data() as Ambulancia);
 }
 
 export async function saveAmbulancia(ambulancia: Ambulancia): Promise<void> {
-  initializeLocalFallback();
-  const ambulancias = await getAmbulancias();
-  const idx = ambulancias.findIndex(a => a.id === ambulancia.id || a.patente === ambulancia.patente);
-  if (idx >= 0) {
-    ambulancias[idx] = ambulancia;
-  } else {
-    ambulancias.push(ambulancia);
-  }
-  localStorage.setItem(AMBULANCIAS_STORAGE_KEY, JSON.stringify(ambulancias));
-
-  if (isFirebaseConfigured) {
-    try {
-      await setDoc(doc(db, 'ambulancias', ambulancia.id), ambulancia);
-    } catch (err) {
-      console.warn("Error guardando ambulancia en Firestore:", err);
-    }
-  }
+  await setDoc(doc(db, "ambulancias", ambulancia.patente), ambulancia, {
+    merge: true,
+  });
 }
 
-// ---------------- TURNOS DE ENTREGA ---------------- //
+/**
+ * Subscribe to real-time ambulancia updates.
+ * Returns unsubscribe function for useEffect cleanup.
+ */
+export function subscribeAmbulancias(
+  callback: (data: Ambulancia[]) => void
+): () => void {
+  return onSnapshot(collection(db, "ambulancias"), (snap) => {
+    callback(snap.docs.map((d) => d.data() as Ambulancia));
+  });
+}
 
+// ──────────────────────────────────────────────────────────────────────────────
+// ENTREGAS DE TURNO
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * One-time fetch (for forms that need to look up existing open turnos).
+ */
 export async function getTurnos(): Promise<TurnoEntrega[]> {
-  initializeLocalFallback();
-  if (isFirebaseConfigured) {
-    try {
-      const q = query(collection(db, 'entregas_turno'), orderBy('fecha', 'desc'));
-      const snapshot = await getDocs(q);
-      if (!snapshot.empty) {
-        return snapshot.docs.map(d => d.data() as TurnoEntrega);
-      }
-    } catch (err) {
-      console.warn("Error leyendo Firestore entregas_turno:", err);
-    }
-  }
-  const turnos: TurnoEntrega[] = JSON.parse(localStorage.getItem(TURNOS_STORAGE_KEY) || '[]');
-  return turnos.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+  const q = query(collection(db, "entregas_turno"), orderBy("fecha", "desc"));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => d.data() as TurnoEntrega);
 }
 
+/**
+ * Save a turno using merge:true — critical for multi-role workflows.
+ * Conductor saves first. TENS later updates the same document without
+ * overwriting conductor data. Also validates required fields before saving.
+ */
 export async function saveTurno(turno: TurnoEntrega): Promise<void> {
-  initializeLocalFallback();
-  const turnos = await getTurnos();
-  const idx = turnos.findIndex(t => t.id === turno.id);
-  if (idx >= 0) {
-    turnos[idx] = turno;
-  } else {
-    turnos.unshift(turno);
-  }
-  localStorage.setItem(TURNOS_STORAGE_KEY, JSON.stringify(turnos));
+  // Guard: reject empty or zero-value submissions that could corrupt data
+  if (!isNonEmpty(turno.patente)) throw new Error("Patente no puede estar vacía.");
+  if (!isNonEmpty(turno.id)) throw new Error("ID de turno no puede estar vacío.");
+  if (!isNonEmpty(turno.creadoPor)) throw new Error("Debe identificarse el creador del turno.");
 
-  if (isFirebaseConfigured) {
-    try {
-      await setDoc(doc(db, 'entregas_turno', turno.id), turno);
-    } catch (err) {
-      console.warn("Error guardando turno en Firestore:", err);
-    }
-  }
+  await setDoc(
+    doc(db, "entregas_turno", turno.id),
+    {
+      ...turno,
+      actualizadoEn: serverTimestamp(),
+    },
+    { merge: true }  // ← CRITICAL: prevents overwriting existing conductor/TENS data
+  );
 }
 
-// ---------------- NOVEDADES / EVENTOS ANOMALOS (ACREDITACION) ---------------- //
+/**
+ * Real-time listener for the Dashboard — updates automatically when any user
+ * saves a turno from any device.
+ */
+export function subscribeTurnos(
+  callback: (data: TurnoEntrega[]) => void
+): () => void {
+  const q = query(collection(db, "entregas_turno"), orderBy("fecha", "desc"));
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => d.data() as TurnoEntrega));
+  });
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// NOVEDADES
+// ──────────────────────────────────────────────────────────────────────────────
 
 export async function getNovedades(): Promise<Novedad[]> {
-  initializeLocalFallback();
-  if (isFirebaseConfigured) {
-    try {
-      const q = query(collection(db, 'novedades'), orderBy('reportadoEn', 'desc'));
-      const snapshot = await getDocs(q);
-      if (!snapshot.empty) {
-        return snapshot.docs.map(d => d.data() as Novedad);
-      }
-    } catch (err) {
-      console.warn("Error leyendo Firestore novedades:", err);
-    }
-  }
-  const novedades: Novedad[] = JSON.parse(localStorage.getItem(NOVEDADES_STORAGE_KEY) || '[]');
-  return novedades.sort((a, b) => new Date(b.reportadoEn).getTime() - new Date(a.reportadoEn).getTime());
+  const q = query(collection(db, "novedades"), orderBy("reportadoEn", "desc"));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Novedad));
 }
 
 export async function saveNovedad(novedad: Novedad): Promise<void> {
-  initializeLocalFallback();
-  const novedades = await getNovedades();
-  const idx = novedades.findIndex(n => n.id === novedad.id);
-  if (idx >= 0) {
-    novedades[idx] = novedad;
-  } else {
-    novedades.unshift(novedad);
-  }
-  localStorage.setItem(NOVEDADES_STORAGE_KEY, JSON.stringify(novedades));
+  if (!isNonEmpty(novedad.patente)) throw new Error("Novedad debe tener patente.");
+  if (!isNonEmpty(novedad.itemAfectado)) throw new Error("Novedad debe identificar el ítem afectado.");
 
-  if (isFirebaseConfigured) {
-    try {
-      await setDoc(doc(db, 'novedades', novedad.id), novedad);
-    } catch (err) {
-      console.warn("Error guardando novedad en Firestore:", err);
-    }
-  }
+  await setDoc(
+    doc(db, "novedades", novedad.id),
+    {
+      ...novedad,
+      actualizadoEn: serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
+/**
+ * Append a trazabilidad action to the novedades/{id}/acciones subcollection.
+ * This keeps the history granular and never overwrites previous actions.
+ */
+export async function addAccionNovedad(
+  novedadId: string,
+  accion: { usuario: string; comentario: string; nuevoEstado: string }
+): Promise<void> {
+  await addDoc(collection(db, "novedades", novedadId, "acciones"), {
+    ...accion,
+    fecha: serverTimestamp(),
+  });
+}
+
+/**
+ * Real-time listener for the Novedades view.
+ */
+export function subscribeNovedades(
+  callback: (data: Novedad[]) => void
+): () => void {
+  const q = query(collection(db, "novedades"), orderBy("reportadoEn", "desc"));
+  return onSnapshot(q, (snap) => {
+    callback(
+      snap.docs.map((d) => ({ id: d.id, ...d.data() } as Novedad))
+    );
+  });
+}
+
+// Legacy compat stub — kept for MantenedorUsuariosView which still uses it
+export async function updateUsuarioPassword(_userId: string, _newHash: string): Promise<void> {
+  // Password changes are now handled exclusively through Firebase Auth
+  // (updatePassword from firebase/auth). This stub is a no-op.
+  console.warn("updateUsuarioPassword: password management is now done via Firebase Auth.");
 }

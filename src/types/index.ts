@@ -7,7 +7,7 @@ export interface AppUser {
   email: string;
   rol: UserRole;
   cargo?: string;
-  passwordHash: string;
+  passwordHash?: string; // Deprecated/legacy: credentials live in Firebase Auth only
   isTemporaryPassword?: boolean;
   activo: boolean;
   creadoEn: string;

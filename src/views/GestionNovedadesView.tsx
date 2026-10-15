@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Novedad, TurnoEntrega, EstadoNovedad, Ambulancia } from '../types';
-import { getNovedades, saveNovedad, getTurnos, getAmbulancias } from '../firebase/firestoreService';
+import { Novedad, EstadoNovedad } from '../types';
+import { subscribeNovedades, saveNovedad, addAccionNovedad } from '../firebase/firestoreService';
 import { 
   AlertTriangle, 
   CheckCircle2, 
@@ -19,8 +19,6 @@ import {
 export const GestionNovedadesView: React.FC = () => {
   const { currentUser } = useAuth();
   const [novedades, setNovedades] = useState<Novedad[]>([]);
-  const [turnos, setTurnos] = useState<TurnoEntrega[]>([]);
-  const [ambulancias, setAmbulancias] = useState<Ambulancia[]>([]);
   const [filtroEstado, setFiltroEstado] = useState<string>('todos');
   const [filtroCriticidad, setFiltroCriticidad] = useState<string>('todos');
   const [searchTerm, setSearchTerm] = useState('');
@@ -32,17 +30,10 @@ export const GestionNovedadesView: React.FC = () => {
   const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
-    loadData();
+    // Real-time subscription — auto-refreshes when any user saves a novedad
+    const unsub = subscribeNovedades(setNovedades);
+    return () => unsub();
   }, []);
-
-  const loadData = async () => {
-    const novs = await getNovedades();
-    setNovedades(novs);
-    const t = await getTurnos();
-    setTurnos(t);
-    const ambs = await getAmbulancias();
-    setAmbulancias(ambs);
-  };
 
   const handleOpenModal = (nov: Novedad) => {
     setNovedadSeleccionada(nov);
@@ -52,36 +43,33 @@ export const GestionNovedadesView: React.FC = () => {
 
   const handleSaveGestion = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!novedadSeleccionada) return;
+    if (!novedadSeleccionada || !comentarioAccion.trim()) return;
 
     setIsUpdating(true);
     try {
       const now = new Date().toISOString();
-      const updatedAcciones = novedadSeleccionada.accionesRealizadas || [];
 
-      if (comentarioAccion.trim()) {
-        updatedAcciones.push({
-          fecha: now,
-          usuario: currentUser?.nombre || "Encargado",
-          comentario: comentarioAccion.trim(),
-          nuevoEstado: nuevoEstado
-        });
-      }
-
+      // 1. Update main novedad document (state + resolution fields)
       const updatedNovedad: Novedad = {
         ...novedadSeleccionada,
         estado: nuevoEstado,
-        accionesRealizadas: updatedAcciones,
         resueltoPor: nuevoEstado === 'resuelta' ? currentUser?.nombre : novedadSeleccionada.resueltoPor,
         resueltoEn: nuevoEstado === 'resuelta' ? now : novedadSeleccionada.resueltoEn,
         resolucionFinal: nuevoEstado === 'resuelta' ? comentarioAccion : novedadSeleccionada.resolucionFinal
       };
-
       await saveNovedad(updatedNovedad);
-      await loadData();
+
+      // 2. Write action to subcolecction — non-destructive trazabilidad
+      await addAccionNovedad(novedadSeleccionada.id, {
+        usuario: currentUser?.nombre || 'Encargado',
+        comentario: comentarioAccion.trim(),
+        nuevoEstado
+      });
+
       setNovedadSeleccionada(null);
+      setComentarioAccion('');
     } catch (err) {
-      console.error("Error al actualizar novedad:", err);
+      console.error('Error al actualizar novedad:', err);
     } finally {
       setIsUpdating(false);
     }

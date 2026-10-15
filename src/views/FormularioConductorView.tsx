@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Ambulancia, ChecklistConductor, TurnoEntrega, Novedad } from '../types';
-import { getAmbulancias, getTurnos, saveTurno, saveNovedad } from '../firebase/firestoreService';
+import { getAmbulancias, getTurnos, saveTurno, saveNovedad, uploadSignature } from '../firebase/firestoreService';
 import { CONDUCTORES_DEFAULT } from '../data/seedData';
 import { SignaturePad } from '../components/SignaturePad';
 import { 
@@ -127,7 +127,13 @@ export const FormularioConductorView: React.FC = () => {
     setIsSubmitting(true);
     try {
       const now = new Date().toISOString();
-      const folio = `ENT-COND-${Date.now().toString().slice(-6)}`;
+      const folio = `ENT-COND-${Date.now().toString().slice(-8)}`;
+      
+      // Upload signatures to Firebase Storage (not embedded in Firestore)
+      const [urlSaliente, urlEntrante] = await Promise.all([
+        firmaSaliente ? uploadSignature(folio, 'conductor_saliente', firmaSaliente) : Promise.resolve(''),
+        firmaEntrante ? uploadSignature(folio, 'conductor_entrante', firmaEntrante) : Promise.resolve(''),
+      ]);
       
       // Evaluar si se deben generar novedades automáticas para Calidad / Transporte
       const novedadesParaCrear: Novedad[] = [];
@@ -221,13 +227,13 @@ export const FormularioConductorView: React.FC = () => {
         conductorSaliente: {
           nombre: nombreSaliente,
           rut: rutSaliente,
-          firmaUrl: firmaSaliente,
+          firmaUrl: urlSaliente,
           fechaHora: now
         },
         conductorEntrante: {
           nombre: nombreEntrante,
           rut: rutEntrante,
-          firmaUrl: firmaEntrante,
+          firmaUrl: urlEntrante,
           fechaHora: now
         },
         observacionesConductorSaliente: obsSaliente,

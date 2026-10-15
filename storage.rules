@@ -1,0 +1,23 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ─── Firmas Digitales ─────────────────────────────────────────────────────
+    // Path: firmas/{folioId}/{role}.png
+    match /firmas/{folioId}/{fileName} {
+      // Authenticated users can download signatures (for PDF generation)
+      allow read: if request.auth != null;
+
+      // Only authenticated users can upload signatures
+      // File must be an image, max 500KB
+      allow write: if request.auth != null
+        && request.resource.size < 500 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Block all other paths
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

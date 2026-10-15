@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Ambulancia, ChecklistTens, TurnoEntrega, Novedad } from '../types';
-import { getAmbulancias, getTurnos, saveTurno, saveNovedad } from '../firebase/firestoreService';
+import { getAmbulancias, getTurnos, saveTurno, saveNovedad, uploadSignature } from '../firebase/firestoreService';
 import { TENS_DEFAULT } from '../data/seedData';
 import { SignaturePad } from '../components/SignaturePad';
 import { 
@@ -121,7 +121,13 @@ export const FormularioTensView: React.FC = () => {
     setIsSubmitting(true);
     try {
       const now = new Date().toISOString();
-      const folio = turnoSeleccionadoId !== 'nuevo' ? turnoSeleccionadoId : `ENT-TENS-${Date.now().toString().slice(-6)}`;
+      const folio = turnoSeleccionadoId !== 'nuevo' ? turnoSeleccionadoId : `ENT-TENS-${Date.now().toString().slice(-8)}`;
+
+      // Upload signatures to Firebase Storage
+      const [urlSaliente, urlEntrante] = await Promise.all([
+        firmaSaliente ? uploadSignature(folio, 'tens_saliente', firmaSaliente) : Promise.resolve(''),
+        firmaEntrante ? uploadSignature(folio, 'tens_entrante', firmaEntrante) : Promise.resolve(''),
+      ]);
 
       // Novedades para Acreditación y Calidad asistencial
       const novedades: Novedad[] = [];
@@ -201,13 +207,13 @@ export const FormularioTensView: React.FC = () => {
           tensSaliente: {
             nombre: nombreSaliente,
             rut: rutSaliente,
-            firmaUrl: firmaSaliente,
+            firmaUrl: urlSaliente,
             fechaHora: now
           },
           tensEntrante: {
             nombre: nombreEntrante,
             rut: rutEntrante,
-            firmaUrl: firmaEntrante,
+            firmaUrl: urlEntrante,
             fechaHora: now
           },
           observacionesTensSaliente: obsSaliente,
