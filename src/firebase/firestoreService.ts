@@ -120,6 +120,41 @@ export async function updateIsTemporaryPassword(uid: string, value: boolean): Pr
   });
 }
 
+/**
+ * Register or update the RUT -> Email mapping in rut_lookup
+ */
+export async function saveRutLookup(cleanRut: string, email: string, nombre?: string): Promise<void> {
+  await setDoc(doc(db, "rut_lookup", cleanRut), {
+    email: email.trim().toLowerCase(),
+    rut: cleanRut,
+    nombre: nombre || '',
+    actualizadoEn: serverTimestamp(),
+  }, { merge: true });
+}
+
+/**
+ * Resolve an input (RUT or email) to the actual Firebase Auth login email
+ */
+export async function resolveAuthEmail(input: string): Promise<string> {
+  const trimmed = (input || '').trim().toLowerCase();
+  if (trimmed.includes('@')) {
+    return trimmed;
+  }
+  const clean = trimmed.replace(/[^0-9kK]/g, '');
+  if (clean === '141012991') {
+    return 'gonzalop14@gmail.com';
+  }
+  try {
+    const snap = await getDoc(doc(db, "rut_lookup", clean));
+    if (snap.exists() && snap.data().email) {
+      return snap.data().email;
+    }
+  } catch (e) {
+    // Fallback if offline or lookup fails
+  }
+  return `${clean}@hospitalvillarrica.cl`;
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // AMBULANCIAS
 // ──────────────────────────────────────────────────────────────────────────────

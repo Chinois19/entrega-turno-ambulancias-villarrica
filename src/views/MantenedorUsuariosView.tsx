@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AppUser, UserRole } from '../types';
-import { getUsuarios, saveUsuario } from '../firebase/firestoreService';
+import { getUsuarios, saveUsuario, saveRutLookup } from '../firebase/firestoreService';
 import { validateRut, formatRut, rutToAuthEmail } from '../utils/authUtils';
 import { initializeApp, getApps, deleteApp } from 'firebase/app';
 import {
@@ -21,7 +21,8 @@ import {
   AlertCircle,
   Mail,
   UserCheck,
-  RefreshCcw
+  RefreshCcw,
+  Send
 } from 'lucide-react';
 
 export const MantenedorUsuariosView: React.FC = () => {
@@ -36,8 +37,9 @@ export const MantenedorUsuariosView: React.FC = () => {
   const [rol, setRol] = useState<UserRole>('conductor');
   const [cargo, setCargo] = useState('');
 
-  // Clave provisoria generada
+  // Clave provisoria generada y confirmación de correo
   const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
+  const [emailSentTo, setEmailSentTo] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -58,6 +60,7 @@ export const MantenedorUsuariosView: React.FC = () => {
     setRol('conductor');
     setCargo('Conductor SAMU / Traslado');
     setGeneratedPassword(null);
+    setEmailSentTo(null);
     setErrorMsg(null);
     setIsModalOpen(true);
   };
@@ -65,6 +68,7 @@ export const MantenedorUsuariosView: React.FC = () => {
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+    setEmailSentTo(null);
 
     if (!validateRut(rut)) {
       setErrorMsg('El RUN ingresado no es válido (Verificación Módulo 11).');
@@ -73,27 +77,38 @@ export const MantenedorUsuariosView: React.FC = () => {
     setSaving(true);
     let secondaryApp: any = null;
     try {
-      // 1. Generate a temporary password
+      // 1. Generar contraseña provisoria
       const tempPass = `Villarrica-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
       const cleanRut = formatRut(rut);
-      const authEmail = rutToAuthEmail(cleanRut);
-      const userDisplayEmail = email.trim() ? email.trim().toLowerCase() : authEmail;
+      const cleanedDigits = cleanRut.replace(/[^0-9kK]/g, '').toLowerCase();
+      const hasRealEmail = email.trim().includes('@');
+      const userDisplayEmail = hasRealEmail ? email.trim().toLowerCase() : rutToAuthEmail(cleanRut);
+      const authEmail = userDisplayEmail;
 
-      // 2. Create account in Firebase Auth using an ISOLATED secondary Auth instance.
-      // Crucial: calling createUserWithEmailAndPassword on primary 'auth' instance replaces
-      // the currently logged-in admin's session with the new user in localStorage, which loses admin
-      // permissions and causes Firestore "Missing or insufficient permissions" errors!
+      // 2. Crear cuenta en Firebase Auth usando una instancia secundaria aislada.
+      // Así se evita sobreescribir la sesión activa del Administrador en el navegador.
       secondaryApp = getApps().find(a => a.name === 'AdminAuthHelper') 
         || initializeApp(firebaseConfig, 'AdminAuthHelper');
       const secondaryAuth = getAuth(secondaryApp);
 
       const credential = await createUserWithEmailAndPassword(secondaryAuth, authEmail, tempPass);
       const uid = credential.user.uid;
+
+      // 3. Enviar correo automático nativo de Firebase al nuevo usuario si ingresó correo
+      if (hasRealEmail) {
+        try {
+          await sendPasswordResetEmail(secondaryAuth, authEmail);
+          setEmailSentTo(authEmail);
+        } catch (mailErr) {
+          console.warn('No se pudo enviar el correo automático de Firebase:', mailErr);
+        }
+      }
+
       await signOut(secondaryAuth);
       await deleteApp(secondaryApp).catch(() => {});
       secondaryApp = null;
 
-      // 3. Create Firestore profile with UID as document ID (safely saved with admin session active)
+      // 4. Guardar perfil en Firestore
       const newUser: AppUser = {
         id: uid,
         nombre: nombre.trim(),
@@ -107,6 +122,12 @@ export const MantenedorUsuariosView: React.FC = () => {
       };
 
       await saveUsuario(newUser);
+
+      // 5. Vincular RUT -> Email para inicio de sesión transparente con RUT
+      if (hasRealEmail) {
+        await saveRutLookup(cleanedDigits, authEmail, nombre.trim());
+      }
+
       await loadUsuarios();
       setGeneratedPassword(tempPass);
     } catch (err: any) {
@@ -308,22 +329,42 @@ export const MantenedorUsuariosView: React.FC = () => {
             )}
 
             {generatedPassword ? (
-              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center space-y-3">
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center space-y-3.5">
                 <UserCheck className="w-8 h-8 text-emerald-600 mx-auto" />
                 <h4 className="font-bold text-emerald-900 text-sm">¡Usuario Creado Exitosamente!</h4>
-                <p className="text-xs text-slate-600">
-                  Entrega esta contraseña provisoria al funcionario. El sistema le exigirá definir su clave definitiva en su primer inicio de sesión:
-                </p>
-                <div className="flex items-center justify-center gap-2 p-2.5 bg-white rounded-lg border border-emerald-300 font-mono font-black text-slate-900 text-base">
-                  <span>{generatedPassword}</span>
-                  <button
-                    type="button"
-                    onClick={() => copyToClipboard(generatedPassword)}
-                    className="p-1 text-slate-400 hover:text-slate-700"
-                    title="Copiar"
-                  >
-                    <Copy className="w-4 h-4" />
-                  </button>
+                
+                {emailSentTo ? (
+                  <div className="p-3 bg-white rounded-xl border border-emerald-300 text-left text-xs text-slate-700 space-y-1 shadow-sm">
+                    <div className="flex items-center gap-2 text-indigo-700 font-bold">
+                      <Send className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+                      <span>Correo automático enviado a:</span>
+                    </div>
+                    <p className="font-bold text-slate-900 pl-6">{emailSentTo}</p>
+                    <p className="text-[11px] text-slate-500 pl-6">
+                      El funcionario ha recibido el correo oficial de Firebase con el enlace para definir directamente su contraseña segura.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-600">
+                    Entrega esta contraseña provisoria al funcionario. El sistema le exigirá definir su clave definitiva en su primer inicio de sesión:
+                  </p>
+                )}
+
+                <div className="space-y-1">
+                  <span className="text-[11px] font-semibold text-slate-500 block">
+                    {emailSentTo ? "Contraseña provisoria de respaldo (o ingreso directo):" : "Contraseña provisoria generada:"}
+                  </span>
+                  <div className="flex items-center justify-center gap-2 p-2.5 bg-white rounded-lg border border-emerald-300 font-mono font-black text-slate-900 text-base">
+                    <span>{generatedPassword}</span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(generatedPassword)}
+                      className="p-1 text-slate-400 hover:text-slate-700"
+                      title="Copiar"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
                 {copied && <span className="text-[11px] text-emerald-700 font-bold block">¡Copiado al portapapeles!</span>}
                 <button
@@ -375,8 +416,8 @@ export const MantenedorUsuariosView: React.FC = () => {
                     placeholder="Opcional: correo@hospitalvillarrica.cl"
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs"
                   />
-                  <p className="text-[10px] text-slate-400 mt-1">
-                    El usuario iniciará sesión siempre con su <strong>RUT</strong>.
+                  <p className="text-[10px] text-indigo-600 mt-1 font-medium">
+                    📧 Al ingresar su correo, Firebase enviará automáticamente un enlace al funcionario para que defina su contraseña. También podrá iniciar sesión con su <strong>RUT</strong>.
                   </p>
                 </div>
 

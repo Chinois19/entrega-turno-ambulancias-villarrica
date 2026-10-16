@@ -18,6 +18,7 @@ import {
   updateIsTemporaryPassword,
   seedAmbulanciasIfEmpty,
   saveUsuario,
+  resolveAuthEmail,
 } from "../firebase/firestoreService";
 
 interface AuthContextType {
@@ -98,7 +99,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!input) {
         return { success: false, error: "Por favor ingrese su RUT institucional." };
       }
-      const authEmail = rutToAuthEmail(input);
+      const authEmail = await resolveAuthEmail(input);
       await signInWithEmailAndPassword(auth, authEmail, password);
       // onAuthStateChanged will handle loading the profile
       return { success: true };

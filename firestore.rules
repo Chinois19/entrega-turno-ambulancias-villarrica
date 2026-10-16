@@ -57,6 +57,12 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ─── Colección: rut_lookup (resolución de RUT a email para login y notificaciones)
+    match /rut_lookup/{rut} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // ─── Colección: ambulancias ───────────────────────────────────────────────
     match /ambulancias/{patente} {
       // All authenticated and active users can read the fleet
