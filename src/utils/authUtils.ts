@@ -95,6 +95,10 @@ export function rutToAuthEmail(credential: string): string {
     return trimmed;
   }
   const clean = cleanRut(trimmed);
+  // Super Admin: Gonzalo's RUT routes directly to his admin account
+  if (clean === '141012991') {
+    return 'gonzalop14@gmail.com';
+  }
   return `${clean}@hospitalvillarrica.cl`;
 }
 

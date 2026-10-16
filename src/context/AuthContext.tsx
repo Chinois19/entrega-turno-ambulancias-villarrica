@@ -52,7 +52,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               id: fbUser.uid,
               email: fbUser.email,
               nombre: "Gonzalo Pérez (Administrador)",
-              rut: "1-9",
+              rut: "14.101.299-1",
               rol: "admin",
               cargo: "Administrador del Sistema y TI",
               activo: true,
