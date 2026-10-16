@@ -10,6 +10,7 @@ import {
   sendPasswordResetEmail,
 } from 'firebase/auth';
 import { auth, firebaseConfig } from '../firebase/config';
+import { sendWelcomeEmail } from '../services/emailService';
 import { 
   Users, 
   UserPlus, 
@@ -22,7 +23,8 @@ import {
   Mail,
   UserCheck,
   RefreshCcw,
-  Send
+  Send,
+  MessageSquare
 } from 'lucide-react';
 
 export const MantenedorUsuariosView: React.FC = () => {
@@ -94,13 +96,24 @@ export const MantenedorUsuariosView: React.FC = () => {
       const credential = await createUserWithEmailAndPassword(secondaryAuth, authEmail, tempPass);
       const uid = credential.user.uid;
 
-      // 3. Enviar correo automático nativo de Firebase al nuevo usuario si ingresó correo
+      // 3. Enviar correo automático vía EmailJS con contraseña provisoria e instrucciones
       if (hasRealEmail) {
         try {
-          await sendPasswordResetEmail(secondaryAuth, authEmail);
-          setEmailSentTo(authEmail);
+          const roleLabel = rol === 'conductor' ? 'Conductor' : rol === 'tens' ? 'TENS' : rol === 'calidad' ? 'Encargada de Calidad' : 'Encargado Transporte';
+          const mailRes = await sendWelcomeEmail({
+            to_name: nombre.trim(),
+            to_email: authEmail,
+            to_rut: cleanRut,
+            temp_password: tempPass,
+            role_name: roleLabel
+          });
+          if (mailRes.success) {
+            setEmailSentTo(authEmail);
+          } else {
+            console.warn('[EmailJS] Advertencia:', mailRes.error);
+          }
         } catch (mailErr) {
-          console.warn('No se pudo enviar el correo automático de Firebase:', mailErr);
+          console.warn('[EmailJS] Error al despachar correo:', mailErr);
         }
       }
 
@@ -146,15 +159,30 @@ export const MantenedorUsuariosView: React.FC = () => {
 
 
   const handleResetPassword = async (u: AppUser) => {
-    if (!window.confirm(`¿Enviar correo de restablecimiento de contraseña a ${u.nombre} (${u.email})?`)) return;
+    if (!window.confirm(`¿Generar nueva clave provisoria y enviarla a ${u.nombre} (${u.email})?`)) return;
     try {
-      await sendPasswordResetEmail(auth, u.email);
-      // Mark as temporary so the app asks to change on next login
+      const newTempPass = `Villarrica-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
       await saveUsuario({ ...u, isTemporaryPassword: true });
       await loadUsuarios();
-      alert(`✅ Correo de restablecimiento enviado a ${u.email}.\n\nEl funcionario debe revisar su bandeja y seguir el enlace de Firebase para definir su nueva contraseña.`);
+
+      if (u.email && u.email.includes('@')) {
+        const mailRes = await sendWelcomeEmail({
+          to_name: u.nombre,
+          to_email: u.email,
+          to_rut: u.rut,
+          temp_password: newTempPass,
+          role_name: u.rol
+        });
+        if (mailRes.success) {
+          alert(`✅ Correo enviado exitosamente vía EmailJS a ${u.email}.\n\nContraseña provisoria generada: ${newTempPass}`);
+        } else {
+          alert(`Contraseña provisoria actualizada a: ${newTempPass}\n\n(Aviso EmailJS: ${mailRes.error || 'Verifica las claves de EmailJS'})`);
+        }
+      } else {
+        alert(`Contraseña provisoria actualizada a: ${newTempPass}`);
+      }
     } catch (err: any) {
-      alert(`Error al enviar correo de restablecimiento: ${err.message}`);
+      alert(`Error al resetear contraseña: ${err.message}`);
     }
   };
 
@@ -341,7 +369,7 @@ export const MantenedorUsuariosView: React.FC = () => {
                     </div>
                     <p className="font-bold text-slate-900 pl-6">{emailSentTo}</p>
                     <p className="text-[11px] text-slate-500 pl-6">
-                      El funcionario ha recibido el correo oficial de Firebase con el enlace para definir directamente su contraseña segura.
+                      El funcionario ha recibido el correo con sus credenciales provisorias y el enlace para ingresar al sistema.
                     </p>
                   </div>
                 ) : (
@@ -367,13 +395,26 @@ export const MantenedorUsuariosView: React.FC = () => {
                   </div>
                 </div>
                 {copied && <span className="text-[11px] text-emerald-700 font-bold block">¡Copiado al portapapeles!</span>}
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs"
-                >
-                  Cerrar y Continuar
-                </button>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const text = `Hola ${nombre.trim()}, se ha generado tu cuenta de usuario para el Sistema de Entrega de Turno de Ambulancias - Hospital de Villarrica.\n\n• RUT de acceso: ${rut}\n• Contraseña provisoria: ${generatedPassword}\n\nPuedes ingresar directamente desde tu celular o computador en:\nhttps://entrega-turno-ambulancias.pages.dev\n\n(Recuerda cambiar tu contraseña en tu primer ingreso).`;
+                      window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+                    }}
+                    className="flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    Enviar por WhatsApp
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-all"
+                  >
+                    Cerrar
+                  </button>
+                </div>
               </div>
             ) : (
               <form onSubmit={handleCreateUser} className="space-y-3.5">
@@ -417,7 +458,7 @@ export const MantenedorUsuariosView: React.FC = () => {
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs"
                   />
                   <p className="text-[10px] text-indigo-600 mt-1 font-medium">
-                    📧 Al ingresar su correo, Firebase enviará automáticamente un enlace al funcionario para que defina su contraseña. También podrá iniciar sesión con su <strong>RUT</strong>.
+                    📧 Al ingresar su correo, se le enviará automáticamente un correo con su contraseña provisoria e instrucciones de acceso. También podrá iniciar sesión con su <strong>RUT</strong>.
                   </p>
                 </div>
 
