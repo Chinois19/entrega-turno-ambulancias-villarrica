@@ -427,7 +427,7 @@ export const FormularioTensView: React.FC = () => {
             {/* Asientos y Cinturones */}
             <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
               <h4 className="text-xs font-black uppercase tracking-wider text-teal-800">
-                Cinturones de Seguridad Asientos Cabina
+                Cinturones de Seguridad Interior
               </h4>
 
               <div className="space-y-2 text-xs font-semibold text-slate-700">

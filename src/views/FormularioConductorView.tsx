@@ -370,36 +370,34 @@ export const FormularioConductorView: React.FC = () => {
             2. Lista de Chequeo de Fijaciones
           </h3>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
-              <h4 className="text-xs font-black uppercase tracking-wider text-sky-800">
-                Cinturones de Seguridad Asientos Cabina Conductor
-              </h4>
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+            <h4 className="text-xs font-black uppercase tracking-wider text-sky-800">
+              Cinturones de Seguridad Asientos Cabina Conductor
+            </h4>
 
-              <div className="space-y-3 text-xs font-semibold text-slate-700">
-                <div className="flex items-center justify-between">
-                  <span>Cinturón Asiento Conductor:</span>
-                  <select
-                    value={checklist.cinturonConductor}
-                    onChange={e => setChecklist({ ...checklist, cinturonConductor: e.target.value as any })}
-                    className="px-2 py-1 rounded border border-slate-300 bg-white"
-                  >
-                    <option value="Operativo">Operativo</option>
-                    <option value="No Operativo">No Operativo</option>
-                  </select>
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-semibold text-slate-700">
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-white border border-slate-200">
+                <span>Cinturón Asiento Conductor:</span>
+                <select
+                  value={checklist.cinturonConductor}
+                  onChange={e => setChecklist({ ...checklist, cinturonConductor: e.target.value as any })}
+                  className="px-2.5 py-1 rounded border border-slate-300 bg-white font-medium text-slate-800"
+                >
+                  <option value="Operativo">Operativo</option>
+                  <option value="No Operativo">No Operativo</option>
+                </select>
+              </div>
 
-                <div className="flex items-center justify-between">
-                  <span>Cinturón Asiento Copiloto:</span>
-                  <select
-                    value={checklist.cinturonCopiloto}
-                    onChange={e => setChecklist({ ...checklist, cinturonCopiloto: e.target.value as any })}
-                    className="px-2 py-1 rounded border border-slate-300 bg-white"
-                  >
-                    <option value="Operativo">Operativo</option>
-                    <option value="No Operativo">No Operativo</option>
-                  </select>
-                </div>
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-white border border-slate-200">
+                <span>Cinturón Asiento Copiloto:</span>
+                <select
+                  value={checklist.cinturonCopiloto}
+                  onChange={e => setChecklist({ ...checklist, cinturonCopiloto: e.target.value as any })}
+                  className="px-2.5 py-1 rounded border border-slate-300 bg-white font-medium text-slate-800"
+                >
+                  <option value="Operativo">Operativo</option>
+                  <option value="No Operativo">No Operativo</option>
+                </select>
               </div>
             </div>
           </div>
