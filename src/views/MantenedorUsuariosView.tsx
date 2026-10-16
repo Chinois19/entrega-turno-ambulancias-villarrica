@@ -2,11 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { AppUser, UserRole } from '../types';
 import { getUsuarios, saveUsuario } from '../firebase/firestoreService';
 import { validateRut, formatRut, rutToAuthEmail } from '../utils/authUtils';
+import { initializeApp, getApps, deleteApp } from 'firebase/app';
 import {
+  getAuth,
   createUserWithEmailAndPassword,
+  signOut,
   sendPasswordResetEmail,
 } from 'firebase/auth';
-import { auth } from '../firebase/config';
+import { auth, firebaseConfig } from '../firebase/config';
 import { 
   Users, 
   UserPlus, 
@@ -68,6 +71,7 @@ export const MantenedorUsuariosView: React.FC = () => {
       return;
     }
     setSaving(true);
+    let secondaryApp: any = null;
     try {
       // 1. Generate a temporary password
       const tempPass = `Villarrica-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
@@ -75,11 +79,21 @@ export const MantenedorUsuariosView: React.FC = () => {
       const authEmail = rutToAuthEmail(cleanRut);
       const userDisplayEmail = email.trim() ? email.trim().toLowerCase() : authEmail;
 
-      // 2. Create account in Firebase Auth using RUT-based auth email
-      const credential = await createUserWithEmailAndPassword(auth, authEmail, tempPass);
-      const uid = credential.user.uid;
+      // 2. Create account in Firebase Auth using an ISOLATED secondary Auth instance.
+      // Crucial: calling createUserWithEmailAndPassword on primary 'auth' instance replaces
+      // the currently logged-in admin's session with the new user in localStorage, which loses admin
+      // permissions and causes Firestore "Missing or insufficient permissions" errors!
+      secondaryApp = getApps().find(a => a.name === 'AdminAuthHelper') 
+        || initializeApp(firebaseConfig, 'AdminAuthHelper');
+      const secondaryAuth = getAuth(secondaryApp);
 
-      // 3. Create Firestore profile with UID as document ID
+      const credential = await createUserWithEmailAndPassword(secondaryAuth, authEmail, tempPass);
+      const uid = credential.user.uid;
+      await signOut(secondaryAuth);
+      await deleteApp(secondaryApp).catch(() => {});
+      secondaryApp = null;
+
+      // 3. Create Firestore profile with UID as document ID (safely saved with admin session active)
       const newUser: AppUser = {
         id: uid,
         nombre: nombre.trim(),
@@ -96,8 +110,11 @@ export const MantenedorUsuariosView: React.FC = () => {
       await loadUsuarios();
       setGeneratedPassword(tempPass);
     } catch (err: any) {
+      if (secondaryApp) {
+        await deleteApp(secondaryApp).catch(() => {});
+      }
       if (err.code === 'auth/email-already-in-use') {
-        setErrorMsg('Este correo ya tiene una cuenta en Firebase Auth.');
+        setErrorMsg('Este RUN o correo ya tiene una cuenta registrada en Firebase Auth.');
       } else {
         setErrorMsg(err.message || 'Error al crear el usuario.');
       }
