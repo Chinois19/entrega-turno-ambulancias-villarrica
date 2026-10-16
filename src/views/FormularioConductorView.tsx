@@ -11,6 +11,7 @@ import {
   Wrench, 
   Gauge, 
   Shield, 
+  ShieldCheck,
   Check, 
   AlertCircle,
   Truck,
@@ -36,8 +37,10 @@ export const FormularioConductorView: React.FC = () => {
   const [firmaEntrante, setFirmaEntrante] = useState('');
   const [obsEntrante, setObsEntrante] = useState('');
 
-  // Checklist Conductor (REDCap + Pauta Mantenimiento)
+  // Checklist Conductor
   const [checklist, setChecklist] = useState<ChecklistConductor>({
+    cinturonConductor: 'Operativo',
+    cinturonCopiloto: 'Operativo',
     permisoCirculacion: true,
     revisionTecnica: true,
     tarjetaCombustible: 'Si',
@@ -137,6 +140,24 @@ export const FormularioConductorView: React.FC = () => {
       
       // Evaluar si se deben generar novedades automáticas para Calidad / Transporte
       const novedadesParaCrear: Novedad[] = [];
+
+      if (checklist.cinturonConductor === 'No Operativo' || checklist.cinturonCopiloto === 'No Operativo') {
+        novedadesParaCrear.push({
+          id: `nov-${Date.now()}-cinturon`,
+          turnoId: folio,
+          folioTurno: folio,
+          patente: selectedPatente,
+          tipoOrigen: 'conductor',
+          categoria: 'mecanica',
+          itemAfectado: 'Cinturones de Seguridad Cabina Conductor',
+          descripcion: `Cinturón no operativo: Conductor (${checklist.cinturonConductor}), Copiloto (${checklist.cinturonCopiloto}).`,
+          criticidad: 'alta',
+          estado: 'pendiente',
+          reportadoPor: nombreSaliente,
+          reportadoEn: now,
+          asignadoA: 'transporte'
+        });
+      }
 
       if (checklist.nivelAceite === 'Critico' || checklist.nivelAceite === 'Bajo') {
         novedadesParaCrear.push({
@@ -269,12 +290,8 @@ export const FormularioConductorView: React.FC = () => {
           </div>
           <h2 className="text-2xl font-black">Entrega y Recepción de Turno - Conductor</h2>
           <p className="text-sm text-sky-200/80 mt-1">
-            Integración Oficial REDCap + Pauta de Mantenimiento Preventivo (Hospital de Villarrica)
+            Pauta de Mantenimiento Preventivo (Hospital de Villarrica)
           </p>
-        </div>
-        <div className="text-right hidden md:block">
-          <span className="text-xs text-slate-300">Estándar de Calidad:</span>
-          <p className="text-sm font-bold text-emerald-400">Acreditación Hospitalaria Vigente</p>
         </div>
       </div>
 
@@ -346,11 +363,53 @@ export const FormularioConductorView: React.FC = () => {
           </div>
         </div>
 
-        {/* Sección: Documentación y Bitácora (REDCap) */}
+        {/* Sección: Lista de Chequeo de Fijaciones */}
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+          <h3 className="text-base font-bold text-slate-800 flex items-center gap-2 mb-4">
+            <ShieldCheck className="w-5 h-5 text-sky-600" />
+            2. Lista de Chequeo de Fijaciones
+          </h3>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+              <h4 className="text-xs font-black uppercase tracking-wider text-sky-800">
+                Cinturones de Seguridad Asientos Cabina Conductor
+              </h4>
+
+              <div className="space-y-3 text-xs font-semibold text-slate-700">
+                <div className="flex items-center justify-between">
+                  <span>Cinturón Asiento Conductor:</span>
+                  <select
+                    value={checklist.cinturonConductor}
+                    onChange={e => setChecklist({ ...checklist, cinturonConductor: e.target.value as any })}
+                    className="px-2 py-1 rounded border border-slate-300 bg-white"
+                  >
+                    <option value="Operativo">Operativo</option>
+                    <option value="No Operativo">No Operativo</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span>Cinturón Asiento Copiloto:</span>
+                  <select
+                    value={checklist.cinturonCopiloto}
+                    onChange={e => setChecklist({ ...checklist, cinturonCopiloto: e.target.value as any })}
+                    className="px-2 py-1 rounded border border-slate-300 bg-white"
+                  >
+                    <option value="Operativo">Operativo</option>
+                    <option value="No Operativo">No Operativo</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Sección: Documentación y Bitácora */}
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
           <h3 className="text-base font-bold text-slate-800 flex items-center gap-2 mb-4">
             <FileText className="w-5 h-5 text-sky-600" />
-            2. Documentación y Verificaciones Administrativas (REDCap)
+            3. Documentación y Verificaciones Administrativas
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
             <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer">
@@ -423,11 +482,11 @@ export const FormularioConductorView: React.FC = () => {
           </div>
         </div>
 
-        {/* Sección: Niveles y Fluidos (REDCap + Pauta Mantenimiento) */}
+        {/* Sección: Niveles y Fluidos */}
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
           <h3 className="text-base font-bold text-slate-800 flex items-center gap-2 mb-4">
             <Wrench className="w-5 h-5 text-sky-600" />
-            3. Control de Fluidos y Niveles Técnico-Mecánicos
+            4. Control de Fluidos y Niveles Técnico-Mecánicos
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             <div>
@@ -511,11 +570,11 @@ export const FormularioConductorView: React.FC = () => {
           </div>
         </div>
 
-        {/* Sección: Neumáticos, Luces y Seguridad (Pauta Mantenimiento) */}
+        {/* Sección: Neumáticos, Luces y Seguridad */}
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
           <h3 className="text-base font-bold text-slate-800 flex items-center gap-2 mb-4">
             <Shield className="w-5 h-5 text-sky-600" />
-            4. Estado Mecánico Exterior, Luces, Neumáticos y Herramientas
+            5. Estado Mecánico Exterior, Luces, Neumáticos y Herramientas
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             <div>
@@ -605,7 +664,7 @@ export const FormularioConductorView: React.FC = () => {
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
           <h3 className="text-base font-bold text-slate-800 flex items-center gap-2 mb-4">
             <CheckCircle className="w-5 h-5 text-emerald-600" />
-            5. Validación Formal y Firmas Digitales de Ambos Conductores
+            6. Validación Formal y Firmas Digitales de Ambos Conductores
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

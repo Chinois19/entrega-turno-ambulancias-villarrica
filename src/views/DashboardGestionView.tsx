@@ -87,12 +87,13 @@ export const DashboardGestionView: React.FC = () => {
     
     if (t.checklistConductor) {
       const c = t.checklistConductor;
-      doc.text(`• Niveles: Aceite: ${c.nivelAceite} | Refrigerante: ${c.nivelAguaRefrigerante} | Frenos: ${c.nivelLiquidoFrenos} | Combustible: ${c.nivelCombustible}`, 14, 77);
-      doc.text(`• Neumáticos: ${c.estadoNeumaticos} | Plumillas: ${c.estadoPlumillas} | Luces/Balizas: ${c.lucesBalizasSirena}`, 14, 83);
-      doc.text(`• Documentación: Permiso Circulación [${c.permisoCirculacion ? 'OK' : 'Falta'}], Rev. Técnica [${c.revisionTecnica ? 'OK' : 'Falta'}]`, 14, 89);
+      doc.text(`• Fijaciones Cabina: Cinturón Conductor: [${c.cinturonConductor || 'Operativo'}] | Copiloto: [${c.cinturonCopiloto || 'Operativo'}]`, 14, 76);
+      doc.text(`• Niveles: Aceite: ${c.nivelAceite} | Refrigerante: ${c.nivelAguaRefrigerante} | Frenos: ${c.nivelLiquidoFrenos} | Combustible: ${c.nivelCombustible}`, 14, 82);
+      doc.text(`• Neumáticos: ${c.estadoNeumaticos} | Plumillas: ${c.estadoPlumillas} | Luces/Balizas: ${c.lucesBalizasSirena}`, 14, 87);
+      doc.text(`• Documentación: Permiso Circulación [${c.permisoCirculacion ? 'OK' : 'Falta'}], Rev. Técnica [${c.revisionTecnica ? 'OK' : 'Falta'}]`, 14, 92);
     }
     if (t.observacionesConductorSaliente) {
-      doc.text(`• Obs. Conductor: ${t.observacionesConductorSaliente}`, 14, 96);
+      doc.text(`• Obs. Conductor: ${t.observacionesConductorSaliente}`, 14, 97);
     }
 
     // Línea separadora

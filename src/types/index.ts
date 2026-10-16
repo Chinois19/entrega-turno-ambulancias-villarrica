@@ -37,51 +37,55 @@ export interface SignatureData {
   fechaHora: string;
 }
 
-// Conductores: REDCap + Pauta Preventiva
+// Conductores: Mantenimiento Preventivo e Inspección
 export interface ChecklistConductor {
-  // Documentación (REDCap)
+  // Lista de Chequeo de Fijaciones
+  cinturonConductor: 'Operativo' | 'No Operativo';
+  cinturonCopiloto: 'Operativo' | 'No Operativo';
+
+  // Documentación y Verificaciones Administrativas
   permisoCirculacion: boolean;
   revisionTecnica: boolean;
   tarjetaCombustible: 'Si' | 'No';
   bitacoraMovil: 'Si' | 'No';
 
-  // Niveles & Fluidos (REDCap + Pauta)
+  // Niveles & Fluidos
   nivelAceite: 'Normal' | 'Bajo' | 'Critico';
   nivelAguaRefrigerante: 'Normal' | 'Bajo' | 'Critico';
   nivelLiquidoFrenos: 'Normal' | 'Bajo' | 'Critico';
   nivelLiquidoDireccion: 'Normal' | 'Bajo' | 'Critico';
   nivelCombustible: '1/4' | '1/2' | '3/4' | 'Lleno';
 
-  // Exterior & Mecánica (REDCap + Pauta)
+  // Exterior & Mecánica
   estadoNeumaticos: 'Bueno' | 'Regular' | 'Malo';
-  presionNeumaticos: boolean; // Pauta
+  presionNeumaticos: boolean;
   estadoPlumillas: 'Bueno' | 'Regular' | 'Malo';
-  limpiaparabrisasLuneta: boolean; // Pauta
+  limpiaparabrisasLuneta: boolean;
   exteriorLimpioSinDano: boolean;
   pastillasDiscosFrenos: 'Bueno' | 'Regular' | 'Malo';
 
-  // Sistema Eléctrico & Luces (Pauta)
+  // Sistema Eléctrico & Luces
   lucesBalizasSirena: 'Operativo' | 'No Operativo';
   testigosTablero: 'Normal' | 'Alerta';
   sistemaCargaBaterias: 'Bueno' | 'Regular' | 'Malo';
 
-  // Herramientas & Seguridad (REDCap)
+  // Herramientas & Seguridad
   gataElevadora: boolean;
   juegoLlaves: boolean;
   juegoTriangulos: boolean;
   chalecoReflectante: boolean;
   ruedaRepuesto: boolean;
 
-  // Pruebas y Generales (Pauta)
+  // Pruebas y Generales
   pruebaRutaOk: boolean;
   lubricacionPuertasOk: boolean;
 }
 
 // TENS: Hoja Fijaciones Cabina Sanitaria + Equipos
 export interface ChecklistTens {
-  // Cabina delantera
-  cinturonConductor: 'Operativo' | 'No Operativo';
-  cinturonCopiloto: 'Operativo' | 'No Operativo';
+  // Cabina delantera (opcionales por compatibilidad histórica)
+  cinturonConductor?: 'Operativo' | 'No Operativo';
+  cinturonCopiloto?: 'Operativo' | 'No Operativo';
 
   // Camilla y Sujeción
   camillaSujecionSuperior: 'Operativo' | 'No Operativo';

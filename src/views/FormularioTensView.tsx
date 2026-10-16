@@ -34,11 +34,8 @@ export const FormularioTensView: React.FC = () => {
   const [firmaEntrante, setFirmaEntrante] = useState('');
   const [obsEntrante, setObsEntrante] = useState('');
 
-  // Checklist Cabina Sanitaria (Hoja Fijaciones del Hospital Villarrica)
+  // Checklist Cabina Sanitaria (Fijaciones y Equipamiento)
   const [checklist, setChecklist] = useState<ChecklistTens>({
-    // Cabina delantera
-    cinturonConductor: 'Operativo',
-    cinturonCopiloto: 'Operativo',
 
     // Camilla
     camillaSujecionSuperior: 'Operativo',
@@ -280,10 +277,6 @@ export const FormularioTensView: React.FC = () => {
             Pauta Oficial de Fijaciones, Equipamiento Biomédico y Bioseguridad Hospitalaria
           </p>
         </div>
-        <div className="text-right hidden md:block">
-          <span className="text-xs text-slate-300">Pauta Hospitalaria:</span>
-          <p className="text-sm font-bold text-teal-300">Acreditación • Calidad y Seguridad</p>
-        </div>
       </div>
 
       {successMessage && (
@@ -370,7 +363,7 @@ export const FormularioTensView: React.FC = () => {
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
           <h3 className="text-base font-bold text-slate-800 flex items-center gap-2 mb-4">
             <ShieldCheck className="w-5 h-5 text-teal-600" />
-            2. Lista de Chequeo de Fijaciones (Pauta Institucional)
+            2. Lista de Chequeo de Fijaciones
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -455,30 +448,6 @@ export const FormularioTensView: React.FC = () => {
                   <select
                     value={checklist.cinturonAsientosLaterales}
                     onChange={e => setChecklist({ ...checklist, cinturonAsientosLaterales: e.target.value as any })}
-                    className="px-2 py-1 rounded border border-slate-300 bg-white"
-                  >
-                    <option value="Operativo">Operativo</option>
-                    <option value="No Operativo">No Operativo</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span>Cinturón Asiento Conductor:</span>
-                  <select
-                    value={checklist.cinturonConductor}
-                    onChange={e => setChecklist({ ...checklist, cinturonConductor: e.target.value as any })}
-                    className="px-2 py-1 rounded border border-slate-300 bg-white"
-                  >
-                    <option value="Operativo">Operativo</option>
-                    <option value="No Operativo">No Operativo</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span>Cinturón Asiento Copiloto:</span>
-                  <select
-                    value={checklist.cinturonCopiloto}
-                    onChange={e => setChecklist({ ...checklist, cinturonCopiloto: e.target.value as any })}
                     className="px-2 py-1 rounded border border-slate-300 bg-white"
                   >
                     <option value="Operativo">Operativo</option>
