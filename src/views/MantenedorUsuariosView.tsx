@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AppUser, UserRole } from '../types';
 import { getUsuarios, saveUsuario } from '../firebase/firestoreService';
-import { validateRut, formatRut } from '../utils/authUtils';
+import { validateRut, formatRut, rutToAuthEmail } from '../utils/authUtils';
 import {
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
@@ -67,19 +67,16 @@ export const MantenedorUsuariosView: React.FC = () => {
       setErrorMsg('El RUN ingresado no es válido (Verificación Módulo 11).');
       return;
     }
-    if (!email.includes('@')) {
-      setErrorMsg('El correo electrónico no es válido.');
-      return;
-    }
-
     setSaving(true);
     try {
       // 1. Generate a temporary password
       const tempPass = `Villarrica-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
       const cleanRut = formatRut(rut);
+      const authEmail = rutToAuthEmail(cleanRut);
+      const userDisplayEmail = email.trim() ? email.trim().toLowerCase() : authEmail;
 
-      // 2. Create account in Firebase Auth
-      const credential = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), tempPass);
+      // 2. Create account in Firebase Auth using RUT-based auth email
+      const credential = await createUserWithEmailAndPassword(auth, authEmail, tempPass);
       const uid = credential.user.uid;
 
       // 3. Create Firestore profile with UID as document ID
@@ -87,7 +84,7 @@ export const MantenedorUsuariosView: React.FC = () => {
         id: uid,
         nombre: nombre.trim(),
         rut: cleanRut,
-        email: email.trim().toLowerCase(),
+        email: userDisplayEmail,
         rol,
         cargo: cargo.trim() || undefined,
         isTemporaryPassword: true,
@@ -352,16 +349,18 @@ export const MantenedorUsuariosView: React.FC = () => {
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Correo Electrónico
+                    Correo Electrónico <span className="text-slate-400 font-normal lowercase">(opcional)</span>
                   </label>
                   <input
                     type="email"
-                    required
                     value={email}
                     onChange={e => setEmail(e.target.value)}
-                    placeholder="usuario@hospitalvillarrica.cl"
+                    placeholder="Opcional: correo@hospitalvillarrica.cl"
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs"
                   />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    El usuario iniciará sesión siempre con su <strong>RUT</strong>.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">

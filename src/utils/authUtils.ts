@@ -75,3 +75,26 @@ export function formatRut(rut: string): string {
   formattedCuerpo = rutCuerpo + formattedCuerpo;
   return `${formattedCuerpo}-${dv}`;
 }
+
+/**
+ * Strips all formatting characters from RUT, returning only digits and lowercase k.
+ * Example: "12.345.678-K" -> "12345678k"
+ */
+export function cleanRut(rut: string): string {
+  return (rut || '').replace(/[^0-9kK]/g, '').toLowerCase();
+}
+
+/**
+ * Normalizes user credential (RUT or email) to Firebase Auth email.
+ * If user enters their RUT (e.g., "12.345.678-9" or "12345678-9"), it converts to "123456789@hospitalvillarrica.cl".
+ * If user enters a full email (e.g., "gonzalop14@gmail.com"), it preserves it.
+ */
+export function rutToAuthEmail(credential: string): string {
+  const trimmed = (credential || '').trim().toLowerCase();
+  if (trimmed.includes('@')) {
+    return trimmed;
+  }
+  const clean = cleanRut(trimmed);
+  return `${clean}@hospitalvillarrica.cl`;
+}
+

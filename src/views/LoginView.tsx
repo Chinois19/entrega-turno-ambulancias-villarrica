@@ -67,7 +67,7 @@ export const LoginView: React.FC = () => {
         <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl p-7 border border-white/20">
           <h2 className="text-lg font-bold text-slate-800 mb-1">Iniciar Sesión</h2>
           <p className="text-xs text-slate-500 mb-5">
-            Ingresa con tu correo electrónico institucional o RUT
+            Ingresa con tu RUN/RUT de funcionario o correo de administrador
           </p>
 
           {error && (
@@ -80,7 +80,7 @@ export const LoginView: React.FC = () => {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Correo o RUT institucional
+                RUT de Funcionario (o Correo)
               </label>
               <div className="relative">
                 <input
@@ -90,7 +90,7 @@ export const LoginView: React.FC = () => {
                   autoComplete="username"
                   value={credential}
                   onChange={handleCredentialChange}
-                  placeholder="correo@hospitalvillarrica.cl o 12.345.678-9"
+                  placeholder="12.345.678-9 (o correo institucional)"
                   className="w-full px-3.5 py-2.5 pl-10 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent text-sm bg-white text-slate-800"
                 />
                 <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />

@@ -10,6 +10,7 @@ import {
 } from "firebase/auth";
 import { auth } from "../firebase/config";
 import { AppUser, UserRole } from "../types";
+import { rutToAuthEmail } from "../utils/authUtils";
 import {
   getUsuarioByUid,
   getUsuarioByEmail,
@@ -87,43 +88,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   // ─── Login ─────────────────────────────────────────────────────────────────
-  // Accepts email directly (or email resolved from RUT lookup in Firestore).
+  // Accepts RUT directly (e.g. 11.111.111-1 or 11111111-1) or email (e.g. gonzalop14@gmail.com).
   const login = async (
     emailOrRut: string,
     password: string
   ): Promise<{ success: boolean; error?: string }> => {
     try {
-      const input = emailOrRut.trim().toLowerCase();
-      let email = input;
-
-      // If input is not an email (no @), look up the email from Firestore by RUT
-      if (!input.includes("@")) {
-        const profile = await getUsuarioByEmail(input).catch(() => null);
-        if (!profile) {
-          // Try RUT-based lookup: strip formatting and query
-          const allUsers = await import("../firebase/firestoreService").then(
-            (m) => m.getUsuarios()
-          );
-          const cleanInput = input.replace(/[^0-9kK]/gi, "").toLowerCase();
-          const found = allUsers.find(
-            (u) => u.rut.replace(/[^0-9kK]/gi, "").toLowerCase() === cleanInput
-          );
-          if (!found) {
-            return { success: false, error: "RUT o correo no encontrado en el sistema." };
-          }
-          email = found.email;
-        } else {
-          email = profile.email;
-        }
+      const input = (emailOrRut || "").trim();
+      if (!input) {
+        return { success: false, error: "Por favor ingrese su RUT institucional." };
       }
-
-      await signInWithEmailAndPassword(auth, email, password);
+      const authEmail = rutToAuthEmail(input);
+      await signInWithEmailAndPassword(auth, authEmail, password);
       // onAuthStateChanged will handle loading the profile
       return { success: true };
     } catch (err: any) {
       const code = err.code || "";
       if (code === "auth/user-not-found" || code === "auth/invalid-credential") {
-        return { success: false, error: "Credenciales incorrectas. Verifique su RUT/correo y contraseña." };
+        return { success: false, error: "Credenciales incorrectas. Verifique su RUT y contraseña." };
       }
       if (code === "auth/wrong-password") {
         return { success: false, error: "Contraseña incorrecta." };
