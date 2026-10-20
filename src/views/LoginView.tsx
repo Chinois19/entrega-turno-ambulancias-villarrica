@@ -8,9 +8,14 @@ import {
   ShieldCheck,
   HeartPulse,
   Wifi,
-  WifiOff,
+  KeyRound,
+  Send,
+  CheckCircle2,
 } from "lucide-react";
 import { formatRut } from "../utils/authUtils";
+import { resolveAuthEmail } from "../firebase/firestoreService";
+import { sendPasswordResetEmail } from "firebase/auth";
+import { auth } from "../firebase/config";
 
 export const LoginView: React.FC = () => {
   const { login } = useAuth();
@@ -18,6 +23,12 @@ export const LoginView: React.FC = () => {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Modal / Estado de recuperación de clave
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotInput, setForgotInput] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotMsg, setForgotMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,11 +43,41 @@ export const LoginView: React.FC = () => {
 
   const handleCredentialChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    // If it looks like an email, don't auto-format
     if (val.includes("@")) {
       setCredential(val);
     } else {
       setCredential(formatRut(val));
+    }
+  };
+
+  const handleForgotSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotMsg(null);
+    const input = (forgotInput || credential || "").trim();
+    if (!input) {
+      setForgotMsg({ type: 'error', text: 'Por favor ingrese su RUN o correo institucional.' });
+      return;
+    }
+    setForgotLoading(true);
+    try {
+      const email = await resolveAuthEmail(input);
+      if (!email || !email.includes('@')) {
+        setForgotMsg({ type: 'error', text: 'No se encontró un correo institucional asociado a este RUN.' });
+        return;
+      }
+      await sendPasswordResetEmail(auth, email);
+      setForgotMsg({
+        type: 'success',
+        text: `✅ Enlace oficial de restablecimiento enviado a ${email}. Revisa tu bandeja de entrada o spam para definir tu clave e ingresar con tu RUN.`
+      });
+    } catch (err: any) {
+      if (err.code === 'auth/user-not-found') {
+        setForgotMsg({ type: 'error', text: 'No se encontró ningún usuario con ese RUN o correo.' });
+      } else {
+        setForgotMsg({ type: 'error', text: err.message || 'Error al enviar enlace de restablecimiento.' });
+      }
+    } finally {
+      setForgotLoading(false);
     }
   };
 
@@ -114,6 +155,19 @@ export const LoginView: React.FC = () => {
                 />
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
               </div>
+              <div className="flex justify-end mt-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForgotInput(credential);
+                    setForgotMsg(null);
+                    setShowForgotModal(true);
+                  }}
+                  className="text-xs text-sky-600 hover:text-sky-700 font-semibold transition-colors"
+                >
+                  ¿Olvidaste tu contraseña o necesitas recuperarla?
+                </button>
+              </div>
             </div>
 
             <button
@@ -125,6 +179,83 @@ export const LoginView: React.FC = () => {
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
+
+          {/* Modal Recuperación de Contraseña */}
+          {showForgotModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-sky-100 space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <div className="flex items-center gap-2 text-sky-700 font-bold text-sm">
+                    <KeyRound className="w-4 h-4 text-sky-600" />
+                    <span>Recuperar / Definir Clave</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotModal(false)}
+                    className="text-slate-400 hover:text-slate-600 text-sm font-bold p-1"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Ingresa tu RUN institucional o correo registrado. Te enviaremos un enlace oficial de Google Firebase a tu correo para que puedas definir o restablecer tu contraseña:
+                </p>
+
+                {forgotMsg && (
+                  <div className={`p-3 text-xs rounded-xl flex items-start gap-2 ${
+                    forgotMsg.type === 'success' 
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' 
+                      : 'bg-red-50 text-red-700 border border-red-200'
+                  }`}>
+                    {forgotMsg.type === 'success' ? (
+                      <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-emerald-600 mt-0.5" />
+                    ) : (
+                      <span className="text-red-500 font-bold">⚠</span>
+                    )}
+                    <span>{forgotMsg.text}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleForgotSubmit} className="space-y-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      RUN o Correo Institucional
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={forgotInput}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setForgotInput(val.includes("@") ? val : formatRut(val));
+                      }}
+                      placeholder="12.345.678-9 (o correo)"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono font-semibold"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotModal(false)}
+                      className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold"
+                    >
+                      Cerrar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={forgotLoading}
+                      className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-sm disabled:opacity-50 transition-all"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>{forgotLoading ? "Enviando enlace..." : "Enviar Enlace"}</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
 
           {/* Security notice */}
           <div className="mt-5 pt-4 border-t border-slate-100">

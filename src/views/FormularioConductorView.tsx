@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Ambulancia, ChecklistConductor, TurnoEntrega, Novedad } from '../types';
-import { getAmbulancias, getTurnos, saveTurno, saveNovedad, uploadSignature } from '../firebase/firestoreService';
-import { CONDUCTORES_DEFAULT } from '../data/seedData';
+import { getAmbulancias, getTurnos, saveTurno, saveNovedad, uploadSignature, getUsuarios } from '../firebase/firestoreService';
 import { SignaturePad } from '../components/SignaturePad';
 import { 
   CheckCircle, 
@@ -21,6 +20,7 @@ import {
 export const FormularioConductorView: React.FC = () => {
   const { currentUser } = useAuth();
   const [ambulancias, setAmbulancias] = useState<Ambulancia[]>([]);
+  const [conductores, setConductores] = useState<{ rut: string; nombre: string }[]>([]);
   const [turnosExistentes, setTurnosExistentes] = useState<TurnoEntrega[]>([]);
   const [selectedPatente, setSelectedPatente] = useState('');
   const [kilometraje, setKilometraje] = useState<number>(0);
@@ -85,6 +85,12 @@ export const FormularioConductorView: React.FC = () => {
     }
     const t = await getTurnos();
     setTurnosExistentes(t);
+
+    const users = await getUsuarios();
+    const condList = users
+      .filter(u => u.rol === 'conductor' && u.activo && !u.eliminado)
+      .map(u => ({ rut: u.rut, nombre: u.nombre }));
+    setConductores(condList);
   };
 
   const handlePatenteChange = (pat: string) => {
@@ -97,13 +103,13 @@ export const FormularioConductorView: React.FC = () => {
 
   const handleSalienteSelect = (nombre: string) => {
     setNombreSaliente(nombre);
-    const found = CONDUCTORES_DEFAULT.find(c => c.nombre === nombre);
+    const found = conductores.find(c => c.nombre === nombre);
     if (found) setRutSaliente(found.rut);
   };
 
   const handleEntranteSelect = (nombre: string) => {
     setNombreEntrante(nombre);
-    const found = CONDUCTORES_DEFAULT.find(c => c.nombre === nombre);
+    const found = conductores.find(c => c.nombre === nombre);
     if (found) setRutEntrante(found.rut);
   };
 
@@ -678,12 +684,36 @@ export const FormularioConductorView: React.FC = () => {
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-semibold bg-white"
                 >
                   <option value="">Seleccione conductor saliente...</option>
-                  {CONDUCTORES_DEFAULT.map(c => (
+                  {conductores.map(c => (
                     <option key={c.rut} value={c.nombre}>
                       {c.nombre} ({c.rut})
                     </option>
                   ))}
+                  {conductores.length === 0 && (
+                    <option value="" disabled>No hay conductores registrados aún por Transporte</option>
+                  )}
                 </select>
+                {conductores.length === 0 && (
+                  <div className="mt-2 space-y-1.5 p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                    <label className="block text-[11px] font-semibold text-slate-600">O ingrese nombre y RUT manualmente:</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        placeholder="Nombre completo"
+                        value={nombreSaliente}
+                        onChange={e => setNombreSaliente(e.target.value)}
+                        className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold"
+                      />
+                      <input
+                        type="text"
+                        placeholder="RUT (ej: 12.345.678-9)"
+                        value={rutSaliente}
+                        onChange={e => setRutSaliente(e.target.value)}
+                        className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -718,12 +748,36 @@ export const FormularioConductorView: React.FC = () => {
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-semibold bg-white"
                 >
                   <option value="">Seleccione conductor entrante...</option>
-                  {CONDUCTORES_DEFAULT.map(c => (
+                  {conductores.map(c => (
                     <option key={c.rut} value={c.nombre}>
                       {c.nombre} ({c.rut})
                     </option>
                   ))}
+                  {conductores.length === 0 && (
+                    <option value="" disabled>No hay conductores registrados aún por Transporte</option>
+                  )}
                 </select>
+                {conductores.length === 0 && (
+                  <div className="mt-2 space-y-1.5 p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                    <label className="block text-[11px] font-semibold text-slate-600">O ingrese nombre y RUT manualmente:</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        placeholder="Nombre completo"
+                        value={nombreEntrante}
+                        onChange={e => setNombreEntrante(e.target.value)}
+                        className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold"
+                      />
+                      <input
+                        type="text"
+                        placeholder="RUT (ej: 12.345.678-9)"
+                        value={rutEntrante}
+                        onChange={e => setRutEntrante(e.target.value)}
+                        className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>

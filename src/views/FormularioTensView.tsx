@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Ambulancia, ChecklistTens, TurnoEntrega, Novedad } from '../types';
-import { getAmbulancias, getTurnos, saveTurno, saveNovedad, uploadSignature } from '../firebase/firestoreService';
-import { TENS_DEFAULT } from '../data/seedData';
+import { getAmbulancias, getTurnos, saveTurno, saveNovedad, uploadSignature, getUsuarios } from '../firebase/firestoreService';
 import { SignaturePad } from '../components/SignaturePad';
 import { 
   HeartPulse, 
@@ -18,6 +17,7 @@ import {
 export const FormularioTensView: React.FC = () => {
   const { currentUser } = useAuth();
   const [ambulancias, setAmbulancias] = useState<Ambulancia[]>([]);
+  const [tensList, setTensList] = useState<{ rut: string; nombre: string }[]>([]);
   const [selectedPatente, setSelectedPatente] = useState('');
   const [turnoTipo, setTurnoTipo] = useState<'Día (08:00 - 20:00)' | 'Noche (20:00 - 08:00)'>('Día (08:00 - 20:00)');
   const [turnosAbiertos, setTurnosAbiertos] = useState<TurnoEntrega[]>([]);
@@ -81,17 +81,23 @@ export const FormularioTensView: React.FC = () => {
     // Turnos de hoy o pendientes de TENS
     const pendientes = t.filter(x => x.estado === 'pendiente_tens' || !x.tensSaliente);
     setTurnosAbiertos(pendientes);
+
+    const users = await getUsuarios();
+    const list = users
+      .filter(u => u.rol === 'tens' && u.activo && !u.eliminado)
+      .map(u => ({ rut: u.rut, nombre: u.nombre }));
+    setTensList(list);
   };
 
   const handleSalienteSelect = (nombre: string) => {
     setNombreSaliente(nombre);
-    const found = TENS_DEFAULT.find(t => t.nombre === nombre);
+    const found = tensList.find(t => t.nombre === nombre);
     if (found) setRutSaliente(found.rut);
   };
 
   const handleEntranteSelect = (nombre: string) => {
     setNombreEntrante(nombre);
-    const found = TENS_DEFAULT.find(t => t.nombre === nombre);
+    const found = tensList.find(t => t.nombre === nombre);
     if (found) setRutEntrante(found.rut);
   };
 
@@ -589,12 +595,36 @@ export const FormularioTensView: React.FC = () => {
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-semibold bg-white"
                 >
                   <option value="">Seleccione TENS saliente...</option>
-                  {TENS_DEFAULT.map(t => (
+                  {tensList.map(t => (
                     <option key={t.rut} value={t.nombre}>
                       {t.nombre} ({t.rut})
                     </option>
                   ))}
+                  {tensList.length === 0 && (
+                    <option value="" disabled>No hay TENS registrados aún por Transporte</option>
+                  )}
                 </select>
+                {tensList.length === 0 && (
+                  <div className="mt-2 space-y-1.5 p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                    <label className="block text-[11px] font-semibold text-slate-600">O ingrese nombre y RUT manualmente:</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        placeholder="Nombre completo TENS"
+                        value={nombreSaliente}
+                        onChange={e => setNombreSaliente(e.target.value)}
+                        className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold"
+                      />
+                      <input
+                        type="text"
+                        placeholder="RUT (ej: 12.345.678-9)"
+                        value={rutSaliente}
+                        onChange={e => setRutSaliente(e.target.value)}
+                        className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -629,12 +659,36 @@ export const FormularioTensView: React.FC = () => {
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-semibold bg-white"
                 >
                   <option value="">Seleccione TENS entrante...</option>
-                  {TENS_DEFAULT.map(t => (
+                  {tensList.map(t => (
                     <option key={t.rut} value={t.nombre}>
                       {t.nombre} ({t.rut})
                     </option>
                   ))}
+                  {tensList.length === 0 && (
+                    <option value="" disabled>No hay TENS registrados aún por Transporte</option>
+                  )}
                 </select>
+                {tensList.length === 0 && (
+                  <div className="mt-2 space-y-1.5 p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                    <label className="block text-[11px] font-semibold text-slate-600">O ingrese nombre y RUT manualmente:</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        placeholder="Nombre completo TENS"
+                        value={nombreEntrante}
+                        onChange={e => setNombreEntrante(e.target.value)}
+                        className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold"
+                      />
+                      <input
+                        type="text"
+                        placeholder="RUT (ej: 12.345.678-9)"
+                        value={rutEntrante}
+                        onChange={e => setRutEntrante(e.target.value)}
+                        className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>

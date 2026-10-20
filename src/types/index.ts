@@ -10,6 +10,10 @@ export interface AppUser {
   passwordHash?: string; // Deprecated/legacy: credentials live in Firebase Auth only
   isTemporaryPassword?: boolean;
   activo: boolean;
+  eliminado?: boolean;
+  motivoBaja?: string;
+  eliminadoEn?: string;
+  eliminadoPor?: string;
   creadoEn: string;
   ultimoAcceso?: string;
 }

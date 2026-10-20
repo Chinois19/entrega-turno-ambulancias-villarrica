@@ -1,94 +1,13 @@
 import { AppUser, Ambulancia } from '../types';
 
-// Conductores oficiales obtenidos del REDCap oficial del Hospital de Villarrica
-export const CONDUCTORES_DEFAULT: { rut: string; nombre: string; email: string }[] = [
-  { rut: "11.111.111-1", nombre: "Víctor Lazo Esparza", email: "vlazo@hospitalvillarrica.cl" },
-  { rut: "12.222.222-2", nombre: "Gerard Gatica Bustos", email: "ggatica@hospitalvillarrica.cl" },
-  { rut: "13.333.333-3", nombre: "Aldo Balladares Gonzales", email: "aballadares@hospitalvillarrica.cl" },
-  { rut: "14.444.444-4", nombre: "Franklin Molina Berrios", email: "fmolina@hospitalvillarrica.cl" },
-  { rut: "15.555.555-5", nombre: "Rony Vera Villagran", email: "rvera@hospitalvillarrica.cl" },
-  { rut: "16.666.666-6", nombre: "Daniel San Martín San Martin", email: "dsanmartin@hospitalvillarrica.cl" },
-  { rut: "17.777.777-7", nombre: "Jonathan Cabezas Lagos", email: "jcabezas@hospitalvillarrica.cl" },
-  { rut: "18.888.888-8", nombre: "Javier Manosalva Barbett", email: "jmanosalva@hospitalvillarrica.cl" },
-  { rut: "19.999.999-9", nombre: "José San Martín Calderón", email: "jsanmartin@hospitalvillarrica.cl" },
-  { rut: "10.123.456-7", nombre: "Mario Garrido Albarran", email: "mgarrido@hospitalvillarrica.cl" },
-  { rut: "11.234.567-8", nombre: "Manuel Cabezas Lagos", email: "mcabezas@hospitalvillarrica.cl" },
-  { rut: "12.345.678-9", nombre: "Pablo Ulloa Mansilla", email: "pulloa@hospitalvillarrica.cl" },
-  { rut: "13.456.789-0", nombre: "Miguel Mendoza Burgos", email: "mmendoza@hospitalvillarrica.cl" },
-  { rut: "14.567.890-1", nombre: "Luis Carter Lillo", email: "lcarter@hospitalvillarrica.cl" },
-  { rut: "15.678.901-2", nombre: "Bladimir Salas Frey", email: "bsalas@hospitalvillarrica.cl" },
-  { rut: "16.789.012-3", nombre: "Andrés Cartagena Roa", email: "acartagena@hospitalvillarrica.cl" },
-  { rut: "17.890.123-4", nombre: "Cesar Iluffi Olivares", email: "ciluffi@hospitalvillarrica.cl" },
-  { rut: "18.901.234-5", nombre: "Francisco Molina Valenzuela", email: "fmolinav@hospitalvillarrica.cl" },
-  { rut: "19.012.345-6", nombre: "Luis Cava Carinao", email: "lcava@hospitalvillarrica.cl" },
-];
+// Listas de personal gestionadas oficialmente por la Encargada de Transporte en el sistema
+export const CONDUCTORES_DEFAULT: { rut: string; nombre: string; email: string }[] = [];
 
-export const TENS_DEFAULT: { rut: string; nombre: string; email: string }[] = [
-  { rut: "12.876.543-2", nombre: "Camila Andrea Soto Morales", email: "csoto@hospitalvillarrica.cl" },
-  { rut: "14.987.654-3", nombre: "Rodrigo Ignacio Palma Reyes", email: "rpalma@hospitalvillarrica.cl" },
-  { rut: "16.543.210-9", nombre: "Valentina Paz Riquelme Sepúlveda", email: "vriquelme@hospitalvillarrica.cl" },
-  { rut: "17.654.321-8", nombre: "Esteban Gonzalo Carrillo Vera", email: "ecarrillo@hospitalvillarrica.cl" },
-  { rut: "15.321.654-7", nombre: "Margarita Elena Fuentes Torres", email: "mfuentes@hospitalvillarrica.cl" },
-];
+export const TENS_DEFAULT: { rut: string; nombre: string; email: string }[] = [];
 
-// Hash SHA-256 de "123456" para entorno inicial demo/provisorio
-// echo -n "123456" | sha256sum -> 8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92
 export const DEFAULT_HASH_123456 = "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92";
 
-export const USUARIOS_INICIALES: AppUser[] = [
-  // Administrador / Calidad
-  {
-    id: "calidad-1",
-    rut: "9.999.999-9",
-    nombre: "Dra. Marcela Lagos (Encargada de Calidad)",
-    email: "calidad@hospitalvillarrica.cl",
-    rol: "calidad",
-    cargo: "Encargada de Calidad y Acreditación",
-    passwordHash: DEFAULT_HASH_123456,
-    isTemporaryPassword: false,
-    activo: true,
-    creadoEn: "2026-01-01T00:00:00Z"
-  },
-  // Encargado de Transporte
-  {
-    id: "transporte-1",
-    rut: "8.888.888-8",
-    nombre: "Roberto Zambrano (Jefe de Movilización)",
-    email: "transporte@hospitalvillarrica.cl",
-    rol: "transporte",
-    cargo: "Jefe Unidad de Transporte y Parque Automotriz",
-    passwordHash: DEFAULT_HASH_123456,
-    isTemporaryPassword: false,
-    activo: true,
-    creadoEn: "2026-01-01T00:00:00Z"
-  },
-  // Conductor Demo
-  {
-    id: "cond-1",
-    rut: "11.111.111-1",
-    nombre: "Víctor Lazo Esparza",
-    email: "vlazo@hospitalvillarrica.cl",
-    rol: "conductor",
-    cargo: "Conductor de Ambulancia SAMU / Traslado",
-    passwordHash: DEFAULT_HASH_123456,
-    isTemporaryPassword: true, // Demostración de skill de cambio de clave obligatoria
-    activo: true,
-    creadoEn: "2026-01-01T00:00:00Z"
-  },
-  // TENS Demo
-  {
-    id: "tens-1",
-    rut: "12.876.543-2",
-    nombre: "Camila Andrea Soto Morales",
-    email: "csoto@hospitalvillarrica.cl",
-    rol: "tens",
-    cargo: "TENS Clínico de Móvil de Traslado",
-    passwordHash: DEFAULT_HASH_123456,
-    isTemporaryPassword: false,
-    activo: true,
-    creadoEn: "2026-01-01T00:00:00Z"
-  }
-];
+export const USUARIOS_INICIALES: AppUser[] = [];
 
 // Flota de ambulancias del Hospital de Villarrica (del REDCap oficial)
 export const AMBULANCIAS_INICIALES: Ambulancia[] = [

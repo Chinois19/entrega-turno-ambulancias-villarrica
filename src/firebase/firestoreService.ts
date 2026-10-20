@@ -13,6 +13,7 @@ import {
   Timestamp,
   where,
   writeBatch,
+  deleteDoc,
 } from "firebase/firestore";
 import {
   ref as storageRef,
@@ -99,6 +100,100 @@ export async function saveUsuario(usuario: AppUser): Promise<void> {
     ...safeData,
     actualizadoEn: serverTimestamp(),
   }, { merge: true });
+}
+
+/**
+ * Delete a user profile permanently from Firestore and clean up rut_lookup.
+ */
+export async function deleteUsuario(uid: string, rut?: string): Promise<void> {
+  await deleteDoc(doc(db, "usuarios", uid));
+  if (rut) {
+    const cleanRut = rut.replace(/[^0-9kK]/g, "").toLowerCase();
+    try {
+      await deleteDoc(doc(db, "rut_lookup", cleanRut));
+    } catch {
+      // Ignore if rut_lookup entry didn't exist
+    }
+  }
+}
+
+/**
+ * Elimina una cuenta sacándola del listado activo, bloqueando el acceso futuro
+ * pero preservando íntegramente sus registros y firmas históricas por acreditación.
+ */
+export async function eliminarCuentaUsuario(
+  uid: string,
+  rut: string,
+  motivo?: string,
+  eliminadoPor?: string
+): Promise<void> {
+  const cleanRut = rut.replace(/[^0-9kK]/g, "").toLowerCase();
+  const fechaIso = new Date().toISOString();
+
+  // 1. Marcar usuario como eliminado en su documento de Firestore
+  await updateDoc(doc(db, "usuarios", uid), {
+    activo: false,
+    eliminado: true,
+    motivoBaja: motivo || "Baja del sistema por Transporte / Administración",
+    eliminadoEn: fechaIso,
+    eliminadoPor: eliminadoPor || "Administración",
+    actualizadoEn: serverTimestamp(),
+  });
+
+  // 2. Registrar bloqueo en rut_lookup para impedir inicio de sesión y registro futuro
+  if (cleanRut) {
+    await setDoc(doc(db, "rut_lookup", cleanRut), {
+      bloqueado: true,
+      eliminado: true,
+      motivoBaja: motivo || "Cuenta dada de baja",
+      eliminadoEn: fechaIso,
+      actualizadoEn: serverTimestamp(),
+    }, { merge: true });
+  }
+}
+
+/**
+ * Reactiva una cuenta dada de baja si la administración así lo requiere.
+ */
+export async function reactivarCuentaUsuario(uid: string, rut: string): Promise<void> {
+  const cleanRut = rut.replace(/[^0-9kK]/g, "").toLowerCase();
+
+  await updateDoc(doc(db, "usuarios", uid), {
+    activo: true,
+    eliminado: false,
+    motivoBaja: null,
+    eliminadoEn: null,
+    eliminadoPor: null,
+    actualizadoEn: serverTimestamp(),
+  });
+
+  if (cleanRut) {
+    await setDoc(doc(db, "rut_lookup", cleanRut), {
+      bloqueado: false,
+      eliminado: false,
+      actualizadoEn: serverTimestamp(),
+    }, { merge: true });
+  }
+}
+
+/**
+ * Verifica si un RUN está registrado como cuenta eliminada / bloqueada para prevenir registros duplicados.
+ */
+export async function verificarRutBloqueado(rut: string): Promise<{ bloqueado: boolean; motivo?: string; fecha?: string } | null> {
+  const clean = rut.replace(/[^0-9kK]/g, "").toLowerCase();
+  try {
+    const snap = await getDoc(doc(db, "rut_lookup", clean));
+    if (snap.exists() && snap.data().bloqueado) {
+      return {
+        bloqueado: true,
+        motivo: snap.data().motivoBaja,
+        fecha: snap.data().eliminadoEn,
+      };
+    }
+  } catch {
+    // Lookup ignore
+  }
+  return null;
 }
 
 /**

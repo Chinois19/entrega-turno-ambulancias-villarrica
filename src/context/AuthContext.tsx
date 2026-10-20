@@ -19,6 +19,7 @@ import {
   seedAmbulanciasIfEmpty,
   saveUsuario,
   resolveAuthEmail,
+  verificarRutBloqueado,
 } from "../firebase/firestoreService";
 
 interface AuthContextType {
@@ -64,14 +65,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             profile = adminUser;
           }
 
-          if (profile && profile.activo) {
+          if (profile && profile.activo && !profile.eliminado) {
             setCurrentUser(profile);
             // Async fire-and-forget: update last access timestamp
             updateUltimoAcceso(fbUser.uid).catch(() => {});
             // Seed fleet if empty once authenticated
             seedAmbulanciasIfEmpty().catch(() => {});
           } else {
-            // Profile not found or inactive — sign out silently
+            // Profile not found, inactive, or eliminated — sign out silently
             await signOut(auth);
             setCurrentUser(null);
           }
@@ -99,6 +100,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!input) {
         return { success: false, error: "Por favor ingrese su RUT institucional." };
       }
+
+      // Check if this RUT was previously eliminated/blocked
+      const blocked = await verificarRutBloqueado(input);
+      if (blocked && blocked.bloqueado) {
+        return {
+          success: false,
+          error: `Esta cuenta fue eliminada del sistema${blocked.fecha ? ` el ${new Date(blocked.fecha).toLocaleDateString()}` : ''}.${blocked.motivo ? ` Motivo: ${blocked.motivo}.` : ''} Contacte a Transporte o Calidad.`
+        };
+      }
+
       const authEmail = await resolveAuthEmail(input);
       await signInWithEmailAndPassword(auth, authEmail, password);
       // onAuthStateChanged will handle loading the profile

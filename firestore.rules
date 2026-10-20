@@ -44,23 +44,23 @@ service cloud.firestore {
 
     // ─── Colección: usuarios ──────────────────────────────────────────────────
     match /usuarios/{uid} {
-      // Users can read their own profile; admins can read all
-      allow read: if isAuthenticated() && (request.auth.uid == uid || isAdmin());
+      // Users can read their own profile; admins, transporte, and calidad can read all
+      allow read: if isAuthenticated() && (request.auth.uid == uid || isAdmin() || hasRole(['transporte', 'calidad']));
 
-      // Admin can create any profile; or an authenticated user can initialize their own profile
-      allow create: if isAuthenticated() && (isAdmin() || request.auth.uid == uid);
+      // Admin or transporte can create profiles
+      allow create: if isAuthenticated() && (isAdmin() || request.auth.uid == uid || hasRole(['transporte']));
 
-      // Only admin can update profiles
-      allow update: if isAdmin();
+      // Admin or transporte can update profiles
+      allow update: if isAdmin() || hasRole(['transporte']);
 
-      // Nobody can delete users (deactivate instead via activo=false)
-      allow delete: if false;
+      // Admin or transporte can delete users
+      allow delete: if isAdmin() || hasRole(['transporte']);
     }
 
     // ─── Colección: rut_lookup (resolución de RUT a email para login y notificaciones)
     match /rut_lookup/{rut} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write, delete: if isAdmin() || hasRole(['transporte']);
     }
 
     // ─── Colección: ambulancias ───────────────────────────────────────────────
