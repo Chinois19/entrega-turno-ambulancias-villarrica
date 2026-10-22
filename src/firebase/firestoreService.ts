@@ -314,14 +314,78 @@ export async function saveTurno(turno: TurnoEntrega): Promise<void> {
   if (!isNonEmpty(turno.id)) throw new Error("ID de turno no puede estar vacío.");
   if (!isNonEmpty(turno.creadoPor)) throw new Error("Debe identificarse el creador del turno.");
 
+  // Remove undefined properties before persisting to prevent Firestore errors
+  const cleanTurno: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(turno)) {
+    if (v !== undefined) {
+      cleanTurno[k] = v;
+    }
+  }
+
   await setDoc(
     doc(db, "entregas_turno", turno.id),
     {
-      ...turno,
+      ...cleanTurno,
       actualizadoEn: serverTimestamp(),
     },
     { merge: true }  // ← CRITICAL: prevents overwriting existing conductor/TENS data
   );
+}
+
+/**
+ * Update specific fields of a turno document cleanly (e.g. by Transporte/Admin),
+ * ensuring individual fields are updated without destroying unmodified nested structures.
+ */
+export async function updateTurnoParcial(turnoId: string, updates: Partial<TurnoEntrega>): Promise<void> {
+  const cleanUpdates: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(updates)) {
+    if (v !== undefined) {
+      cleanUpdates[k] = v;
+    }
+  }
+
+  await updateDoc(doc(db, "entregas_turno", turnoId), {
+    ...cleanUpdates,
+    actualizadoEn: serverTimestamp(),
+  });
+}
+
+/**
+ * Delete a turno document and any associated novedades linked to its folio.
+ * Available to Encargado de Transporte and Admin to purge test or erroneous entries.
+ */
+export async function deleteTurno(turnoId: string, folioTurno?: string): Promise<void> {
+  // 1. Delete the turno document
+  await deleteDoc(doc(db, "entregas_turno", turnoId));
+
+  // 2. Cascade delete any novedades created under this turno if folio provided
+  if (folioTurno || turnoId) {
+    try {
+      const novSnap = await getDocs(
+        query(
+          collection(db, "novedades"),
+          where("turnoId", "==", turnoId)
+        )
+      );
+      for (const d of novSnap.docs) {
+        await deleteDoc(d.ref);
+      }
+      
+      if (folioTurno && folioTurno !== turnoId) {
+        const novSnap2 = await getDocs(
+          query(
+            collection(db, "novedades"),
+            where("folioTurno", "==", folioTurno)
+          )
+        );
+        for (const d of novSnap2.docs) {
+          await deleteDoc(d.ref);
+        }
+      }
+    } catch (e) {
+      console.warn("Error eliminando novedades asociadas:", e);
+    }
+  }
 }
 
 /**

@@ -87,8 +87,8 @@ service cloud.firestore {
       // (merge:true in the app prevents one role from overwriting the other's data)
       allow update: if isConductor() || isTens() || isCalidadOrTransporte();
 
-      // No deletion
-      allow delete: if false;
+      // Transporte or Admin can delete turnos if they need to be re-done due to mistakes
+      allow delete: if isAdmin() || hasRole(['transporte']);
     }
 
     // ─── Colección: novedades ─────────────────────────────────────────────────
@@ -102,15 +102,14 @@ service cloud.firestore {
       // Only Calidad/Transporte/Admin can update status (not conductores or TENS)
       allow update: if isCalidadOrTransporte();
 
-      // No deletion
-      allow delete: if false;
+      // Transporte or Admin can delete novedades associated with discarded turnos
+      allow delete: if isAdmin() || hasRole(['transporte']);
 
       // Acciones subcollection — append-only trazabilidad
       match /acciones/{accionId} {
         allow read: if isOperativo();
         allow create: if isCalidadOrTransporte();
-        // Actions cannot be modified or deleted — immutable audit trail
-        allow update, delete: if false;
+        allow update, delete: if isAdmin() || hasRole(['transporte']);
       }
     }
   }

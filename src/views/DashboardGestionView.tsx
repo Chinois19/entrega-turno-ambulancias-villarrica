@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { TurnoEntrega, Ambulancia, Novedad } from '../types';
-import { subscribeTurnos, subscribeAmbulancias, subscribeNovedades } from '../firebase/firestoreService';
+import { useAuth } from '../context/AuthContext';
+import { 
+  subscribeTurnos, 
+  subscribeAmbulancias, 
+  subscribeNovedades, 
+  deleteTurno, 
+  updateTurnoParcial 
+} from '../firebase/firestoreService';
 import { 
   BarChart3, 
   Clock, 
@@ -13,17 +20,106 @@ import {
   Search,
   ExternalLink,
   ShieldCheck,
-  Radio
+  Radio,
+  Trash2,
+  Edit2,
+  Check,
+  X
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 
 export const DashboardGestionView: React.FC = () => {
+  const { currentUser, hasRole } = useAuth();
   const [turnos, setTurnos] = useState<TurnoEntrega[]>([]);
   const [ambulancias, setAmbulancias] = useState<Ambulancia[]>([]);
   const [novedades, setNovedades] = useState<Novedad[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroEstado, setFiltroEstado] = useState<string>('todos');
   const [online, setOnline] = useState(navigator.onLine);
+
+  // Permisos: Encargado de Transporte o Administrador pueden gestionar, editar y depurar turnos
+  const canManageTurnos = hasRole(['transporte', 'admin']);
+
+  // Modales de Edición y Eliminación
+  const [turnoEditando, setTurnoEditando] = useState<TurnoEntrega | null>(null);
+  const [turnoEliminando, setTurnoEliminando] = useState<TurnoEntrega | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [feedbackToast, setFeedbackToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
+
+  // Campos editables controlados
+  const [editPatente, setEditPatente] = useState('');
+  const [editTurnoTipo, setEditTurnoTipo] = useState<'Día (08:00 - 20:00)' | 'Noche (20:00 - 08:00)'>('Día (08:00 - 20:00)');
+  const [editKilometraje, setEditKilometraje] = useState<number>(0);
+  const [editEstado, setEditEstado] = useState<'pendiente_tens' | 'pendiente_conductor' | 'completo' | 'con_novedades'>('completo');
+  const [editObsConductor, setEditObsConductor] = useState('');
+  const [editObsTens, setEditObsTens] = useState('');
+
+  const abrirModalEdicion = (t: TurnoEntrega) => {
+    setTurnoEditando(t);
+    setEditPatente(t.patente);
+    setEditTurnoTipo(t.turnoTipo);
+    setEditKilometraje(t.kilometraje || 0);
+    setEditEstado(t.estado);
+    setEditObsConductor(t.observacionesConductorSaliente || '');
+    setEditObsTens(t.observacionesTensSaliente || '');
+  };
+
+  const guardarEdicionTurno = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!turnoEditando) return;
+    setIsProcessing(true);
+
+    try {
+      await updateTurnoParcial(turnoEditando.id, {
+        patente: editPatente,
+        turnoTipo: editTurnoTipo,
+        kilometraje: Number(editKilometraje),
+        estado: editEstado,
+        observacionesConductorSaliente: editObsConductor.trim(),
+        observacionesTensSaliente: editObsTens.trim()
+      });
+
+      setFeedbackToast({
+        type: 'success',
+        msg: `Turno ${turnoEditando.codigoFolio} actualizado exitosamente.`
+      });
+      setTurnoEditando(null);
+      setTimeout(() => setFeedbackToast(null), 4000);
+    } catch (err: any) {
+      console.error("Error al actualizar turno:", err);
+      setFeedbackToast({
+        type: 'error',
+        msg: err?.message || "No se pudo actualizar el turno."
+      });
+      setTimeout(() => setFeedbackToast(null), 5000);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const confirmarEliminacionTurno = async () => {
+    if (!turnoEliminando) return;
+    setIsProcessing(true);
+
+    try {
+      await deleteTurno(turnoEliminando.id, turnoEliminando.codigoFolio);
+      setFeedbackToast({
+        type: 'success',
+        msg: `Turno ${turnoEliminando.codigoFolio} y sus registros asociados fueron eliminados correctamente.`
+      });
+      setTurnoEliminando(null);
+      setTimeout(() => setFeedbackToast(null), 4000);
+    } catch (err: any) {
+      console.error("Error al eliminar turno:", err);
+      setFeedbackToast({
+        type: 'error',
+        msg: err?.message || "No se pudo eliminar el turno. Verifique permisos."
+      });
+      setTimeout(() => setFeedbackToast(null), 5000);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   useEffect(() => {
     // Real-time listeners — unsubscribe on unmount
@@ -179,6 +275,29 @@ export const DashboardGestionView: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Toast Flotante de Notificaciones */}
+      {feedbackToast && (
+        <div className={`fixed top-20 right-4 z-50 max-w-md px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 animate-bounce border-2 ${
+          feedbackToast.type === 'success' 
+            ? 'bg-emerald-600 text-white border-emerald-400' 
+            : 'bg-rose-600 text-white border-rose-400'
+        }`}>
+          {feedbackToast.type === 'success' ? (
+            <CheckCircle className="w-5 h-5 flex-shrink-0" />
+          ) : (
+            <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+          )}
+          <p className="text-xs font-bold leading-tight flex-1">{feedbackToast.msg}</p>
+          <button 
+            type="button" 
+            onClick={() => setFeedbackToast(null)} 
+            className="text-white/80 hover:text-white font-black text-sm"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-sky-950 to-slate-900 rounded-2xl p-6 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -313,7 +432,7 @@ export const DashboardGestionView: React.FC = () => {
                 <th className="py-3 px-3">Conductor</th>
                 <th className="py-3 px-3">TENS</th>
                 <th className="py-3 px-3">Estado</th>
-                <th className="py-3 px-3 text-right">Acta PDF</th>
+                <th className="py-3 px-3 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -358,14 +477,39 @@ export const DashboardGestionView: React.FC = () => {
                       </span>
                     </td>
                     <td className="py-3 px-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => exportarPDF(t)}
-                        className="px-3 py-1.5 bg-slate-100 hover:bg-sky-50 text-slate-700 hover:text-sky-700 rounded-lg font-bold inline-flex items-center gap-1.5 transition-colors border border-slate-200"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>PDF</span>
-                      </button>
+                      <div className="inline-flex items-center gap-1.5 justify-end">
+                        <button
+                          type="button"
+                          onClick={() => exportarPDF(t)}
+                          title="Descargar Acta Oficial PDF"
+                          className="px-2.5 py-1.5 bg-slate-100 hover:bg-sky-50 text-slate-700 hover:text-sky-700 rounded-lg font-bold inline-flex items-center gap-1 transition-colors border border-slate-200"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>PDF</span>
+                        </button>
+
+                        {canManageTurnos && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => abrirModalEdicion(t)}
+                              title="Modificar turno por corrección"
+                              className="p-1.5 text-slate-500 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors border border-transparent hover:border-sky-200"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setTurnoEliminando(t)}
+                              title="Eliminar turno para rehacerlo"
+                              className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-200"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -374,6 +518,181 @@ export const DashboardGestionView: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* Modal de Edición de Turno (Transporte / Admin) */}
+      {turnoEditando && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div>
+                <span className="text-[10px] font-black uppercase text-sky-600 tracking-wider">
+                  Módulo Transporte • Corrección de Turno
+                </span>
+                <h3 className="text-base font-black text-slate-800">
+                  Editar Turno Folio: {turnoEditando.codigoFolio}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTurnoEditando(null)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-bold p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={guardarEdicionTurno} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Patente Móvil
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editPatente}
+                    onChange={e => setEditPatente(e.target.value.toUpperCase())}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold uppercase"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Kilometraje
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    value={editKilometraje}
+                    onChange={e => setEditKilometraje(Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Tipo de Turno
+                  </label>
+                  <select
+                    value={editTurnoTipo}
+                    onChange={e => setEditTurnoTipo(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold bg-white"
+                  >
+                    <option value="Día (08:00 - 20:00)">Día (08:00 - 20:00)</option>
+                    <option value="Noche (20:00 - 08:00)">Noche (20:00 - 08:00)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Estado Global
+                  </label>
+                  <select
+                    value={editEstado}
+                    onChange={e => setEditEstado(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold bg-white"
+                  >
+                    <option value="completo">Conforme (Completo)</option>
+                    <option value="con_novedades">Con Novedades</option>
+                    <option value="pendiente_tens">Pendiente TENS</option>
+                    <option value="pendiente_conductor">Pendiente Conductor</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Observaciones Conductor (Saliente)
+                </label>
+                <textarea
+                  rows={2}
+                  value={editObsConductor}
+                  onChange={e => setEditObsConductor(e.target.value)}
+                  placeholder="Sin observaciones mecánicas reportadas..."
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Observaciones TENS (Saliente)
+                </label>
+                <textarea
+                  rows={2}
+                  value={editObsTens}
+                  onChange={e => setEditObsTens(e.target.value)}
+                  placeholder="Sin observaciones clínicas reportadas..."
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs"
+                />
+              </div>
+
+              <div className="bg-sky-50 border border-sky-200 rounded-xl p-3 text-[11px] text-sky-800">
+                ℹ️ Esta modificación respeta la estructura de datos no monolítica de Firestore: actualiza selectivamente los campos sin alterar las firmas electrónicas ni borrar verificaciones de checklist.
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setTurnoEditando(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-bold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isProcessing}
+                  className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-md disabled:opacity-50"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{isProcessing ? "Guardando..." : "Guardar Modificación"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmación de Eliminación (Transporte / Admin) */}
+      {turnoEliminando && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mb-4">
+              <Trash2 className="w-6 h-6" />
+            </div>
+
+            <h3 className="text-base font-black text-slate-900 mb-1">
+              ¿Eliminar Entrega de Turno?
+            </h3>
+            <p className="text-xs text-slate-600 mb-4 leading-relaxed">
+              Estás a punto de eliminar el turno con Folio <strong>{turnoEliminando.codigoFolio}</strong> ({turnoEliminando.patente}). 
+              <br /><br />
+              Esta acción eliminará el registro de la base de datos y permitirá que los funcionarios puedan rehacer el documento correctamente desde cero si hubo una equivocación grave.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isProcessing}
+                onClick={() => setTurnoEliminando(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-bold"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isProcessing}
+                onClick={confirmarEliminacionTurno}
+                className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{isProcessing ? "Eliminando..." : "Sí, Eliminar Turno"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
