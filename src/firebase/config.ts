@@ -18,6 +18,8 @@ export const firebaseConfig = {
 export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
+// Forzar correos del sistema (restablecimiento de contraseña, verificación) en español
+auth.languageCode = 'es';
 export const storage = getStorage(app);
 
 // ─── Enable IndexedDB offline persistence ────────────────────────────────────

@@ -119,13 +119,17 @@ export const MantenedorUsuariosView: React.FC = () => {
     const cleanRut = formatRut(rut);
     const cleanedDigits = cleanRut.replace(/[^0-9kK]/g, '').toLowerCase();
 
-    // 1. Evitar registro futuro si el RUN ya fue eliminado/bloqueado
-    const blockedCheck = await verificarRutBloqueado(cleanedDigits);
-    if (blockedCheck && blockedCheck.bloqueado) {
-      setErrorMsg(
-        `Este RUN (${cleanRut}) se encuentra registrado como cuenta eliminada / dada de baja (${blockedCheck.motivo || 'Baja previa'}). Para evitar registros no autorizados, debe reactivarse desde la pestaña "Cuentas Eliminadas" si corresponde.`
-      );
-      return;
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+    // 1. Evitar registro futuro si el RUN ya fue eliminado/bloqueado (salvo en localhost para pruebas)
+    if (!isLocalhost) {
+      const blockedCheck = await verificarRutBloqueado(cleanedDigits);
+      if (blockedCheck && blockedCheck.bloqueado) {
+        setErrorMsg(
+          `Este RUN (${cleanRut}) se encuentra registrado como cuenta eliminada / dada de baja (${blockedCheck.motivo || 'Baja previa'}). Para evitar registros no autorizados, debe reactivarse desde la pestaña "Cuentas Eliminadas" si corresponde.`
+        );
+        return;
+      }
     }
 
     setSaving(true);
@@ -133,17 +137,34 @@ export const MantenedorUsuariosView: React.FC = () => {
     try {
       // 2. Generar contraseña provisoria
       const tempPass = `Villarrica-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+      // En servicios públicos de salud, varios funcionarios (ej: conductores o unidades)
+      // comparten el mismo correo de contacto (ej: movilizacion@redsalud.gob.cl).
+      // Como Firebase Auth exige un email único por cuenta, la credencial de autenticación
+      // se vincula de manera única al RUN institucional del funcionario, permitiendo
+      // que cada uno tenga su propia contraseña independiente sin conflictos.
       const hasRealEmail = email.trim().includes('@');
-      const userDisplayEmail = hasRealEmail ? email.trim().toLowerCase() : rutToAuthEmail(cleanRut);
-      const authEmail = userDisplayEmail;
+      const contactEmail = hasRealEmail ? email.trim().toLowerCase() : '';
+      const authEmail = `${cleanedDigits}@hospitalvillarrica.cl`;
+
+      let uid: string;
 
       // 3. Crear cuenta en Firebase Auth usando una instancia secundaria aislada.
       secondaryApp = getApps().find(a => a.name === 'AdminAuthHelper') 
         || initializeApp(firebaseConfig, 'AdminAuthHelper');
       const secondaryAuth = getAuth(secondaryApp);
 
-      const credential = await createUserWithEmailAndPassword(secondaryAuth, authEmail, tempPass);
-      const uid = credential.user.uid;
+      try {
+        const credential = await createUserWithEmailAndPassword(secondaryAuth, authEmail, tempPass);
+        uid = credential.user.uid;
+      } catch (authErr: any) {
+        // En localhost para pruebas: si ya existe en Firebase Auth, permitir reutilizar el perfil
+        if (isLocalhost && authErr.code === 'auth/email-already-in-use') {
+          console.warn('[Modo Pruebas Localhost] Correo/RUT ya existe en Firebase Auth. Creando perfil en Firestore para pruebas.');
+          uid = `local-test-${cleanedDigits}-${Date.now().toString(36)}`;
+        } else {
+          throw authErr;
+        }
+      }
 
       // 4. Enviar correo automático vía EmailJS con contraseña provisoria e instrucciones
       if (hasRealEmail) {
@@ -151,13 +172,13 @@ export const MantenedorUsuariosView: React.FC = () => {
           const roleLabel = rol === 'conductor' ? 'Conductor' : rol === 'tens' ? 'TENS' : rol === 'calidad' ? 'Encargada de Calidad' : 'Encargado Transporte';
           const mailRes = await sendWelcomeEmail({
             to_name: nombre.trim(),
-            to_email: authEmail,
+            to_email: contactEmail,
             to_rut: cleanRut,
             temp_password: tempPass,
             role_name: roleLabel
           });
           if (mailRes.success) {
-            setEmailSentTo(authEmail);
+            setEmailSentTo(contactEmail);
           } else {
             console.warn('[EmailJS] Advertencia:', mailRes.error);
           }
@@ -175,10 +196,10 @@ export const MantenedorUsuariosView: React.FC = () => {
         id: uid,
         nombre: nombre.trim(),
         rut: cleanRut,
-        email: userDisplayEmail,
+        email: contactEmail || authEmail,
         rol,
         cargo: cargo.trim() || undefined,
-        isTemporaryPassword: true,
+        isTemporaryPassword: false,
         activo: true,
         eliminado: false,
         creadoEn: new Date().toISOString()
@@ -325,15 +346,28 @@ export const MantenedorUsuariosView: React.FC = () => {
   };
 
   const handleResetPassword = async (u: AppUser) => {
-    if (!window.confirm(`¿Enviar enlace oficial de restablecimiento de contraseña a ${u.nombre} (${u.email})?`)) return;
+    const destinoEmail = u.email && u.email.includes('@') ? u.email : rutToAuthEmail(u.rut);
+    if (!window.confirm(`¿Enviar enlace oficial de restablecimiento de contraseña para ${u.nombre} (RUN: ${u.rut}) al correo ${destinoEmail}?`)) return;
     try {
-      if (u.email && u.email.includes('@')) {
-        await sendPasswordResetEmail(auth, u.email);
-        await saveUsuario({ ...u, isTemporaryPassword: true });
+      const cleanDigits = u.rut.replace(/[^0-9kK]/g, '').toLowerCase();
+      // Intentar resetear con el authEmail del RUN o con su correo registrado
+      let resetSent = false;
+      try {
+        await sendPasswordResetEmail(auth, `${cleanDigits}@hospitalvillarrica.cl`);
+        resetSent = true;
+      } catch {
+        if (u.email && u.email.includes('@')) {
+          await sendPasswordResetEmail(auth, u.email);
+          resetSent = true;
+        }
+      }
+
+      if (resetSent) {
+        await saveUsuario({ ...u, isTemporaryPassword: false });
         await loadUsuarios();
-        alert(`✅ Enlace oficial de restablecimiento de contraseña enviado a ${u.email}.\n\nEl funcionario recibirá el correo de Firebase para definir su nueva clave y podrá ingresar directamente con su RUN al sistema.`);
+        alert(`✅ Enlace oficial de restablecimiento de contraseña generado para ${u.nombre}.\n\nEl funcionario podrá definir su nueva clave e ingresar directamente con su RUN al sistema.`);
       } else {
-        alert('Este usuario no tiene un correo electrónico válido registrado para recibir el enlace de restablecimiento.');
+        alert('No se pudo enviar el enlace. Verifique las credenciales del usuario.');
       }
     } catch (err: any) {
       alert(`Error al resetear contraseña: ${err.message}`);

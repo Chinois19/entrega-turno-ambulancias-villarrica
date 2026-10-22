@@ -50,8 +50,8 @@ service cloud.firestore {
       // Admin or transporte can create profiles
       allow create: if isAuthenticated() && (isAdmin() || request.auth.uid == uid || hasRole(['transporte']));
 
-      // Admin or transporte can update profiles
-      allow update: if isAdmin() || hasRole(['transporte']);
+      // Admin or transporte can update profiles, or user themselves updating their password/profile
+      allow update: if isAdmin() || hasRole(['transporte']) || (isAuthenticated() && request.auth.uid == uid);
 
       // Admin or transporte can delete users
       allow delete: if isAdmin() || hasRole(['transporte']);
