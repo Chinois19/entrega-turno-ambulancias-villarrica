@@ -48,13 +48,8 @@ export async function uploadSignature(
 
 // ─── Seed ambulancias if empty ────────────────────────────────────────────────
 export async function seedAmbulanciasIfEmpty(): Promise<void> {
-  const snap = await getDocs(collection(db, "ambulancias"));
-  if (!snap.empty) return;
-  const batch = writeBatch(db);
-  for (const amb of AMBULANCIAS_INICIALES) {
-    batch.set(doc(db, "ambulancias", amb.patente), amb);
-  }
-  await batch.commit();
+  // Desactivado para producción: Las ambulancias se gestionan exclusivamente desde el Mantenedor de Flota
+  return;
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -256,12 +251,27 @@ export async function resolveAuthEmail(input: string): Promise<string> {
 
 export async function getAmbulancias(): Promise<Ambulancia[]> {
   const snap = await getDocs(collection(db, "ambulancias"));
-  return snap.docs.map((d) => d.data() as Ambulancia);
+  return snap.docs
+    .map((d) => d.data() as Ambulancia)
+    .filter((a) => !a.eliminado && a.activo !== false);
 }
 
 export async function saveAmbulancia(ambulancia: Ambulancia): Promise<void> {
-  await setDoc(doc(db, "ambulancias", ambulancia.patente), ambulancia, {
+  await setDoc(doc(db, "ambulancias", ambulancia.patente), {
+    ...ambulancia,
+    eliminado: false,
+    activo: true
+  }, {
     merge: true,
+  });
+}
+
+export async function eliminarAmbulancia(patente: string): Promise<void> {
+  await updateDoc(doc(db, "ambulancias", patente), {
+    eliminado: true,
+    activo: false,
+    estado: 'fuera_servicio',
+    actualizadoEn: serverTimestamp()
   });
 }
 
@@ -273,7 +283,10 @@ export function subscribeAmbulancias(
   callback: (data: Ambulancia[]) => void
 ): () => void {
   return onSnapshot(collection(db, "ambulancias"), (snap) => {
-    callback(snap.docs.map((d) => d.data() as Ambulancia));
+    const list = snap.docs
+      .map((d) => d.data() as Ambulancia)
+      .filter((a) => !a.eliminado && a.activo !== false);
+    callback(list);
   });
 }
 

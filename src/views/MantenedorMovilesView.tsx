@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Ambulancia } from '../types';
-import { getAmbulancias, saveAmbulancia } from '../firebase/firestoreService';
+import { getAmbulancias, saveAmbulancia, eliminarAmbulancia } from '../firebase/firestoreService';
 import { 
   Truck, 
   Plus, 
@@ -12,7 +12,8 @@ import {
   Edit3,
   Check,
   ShieldCheck,
-  Clock
+  Clock,
+  Trash2
 } from 'lucide-react';
 
 export const MantenedorMovilesView: React.FC = () => {
@@ -110,6 +111,17 @@ export const MantenedorMovilesView: React.FC = () => {
     }
   };
 
+  const handleDeleteAmbulancia = async (patente: string, nombre: string) => {
+    if (!window.confirm(`¿Dar de baja y retirar de producción el móvil ${patente} (${nombre})?`)) return;
+    try {
+      await eliminarAmbulancia(patente);
+      await loadAmbulancias();
+    } catch (err) {
+      console.error("Error al dar de baja ambulancia:", err);
+      alert("Error al dar de baja el móvil.");
+    }
+  };
+
   // Cálculo de alerta de mantención
   const getAlertaMantencion = (a: Ambulancia) => {
     const kmRestantes = a.proximoMantenimientoKm - a.kilometrajeActual;
@@ -185,82 +197,109 @@ export const MantenedorMovilesView: React.FC = () => {
       </div>
 
       {/* Grid de Ambulancias */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {filteredAmbulancias.map(amb => {
-          const alerta = getAlertaMantencion(amb);
+      {filteredAmbulancias.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center">
+          <Truck className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+          <h3 className="text-base font-bold text-slate-700">No hay móviles en la flota</h3>
+          <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+            La flota de prueba ha sido retirada. Presiona "Ingresar Nueva Ambulancia" para registrar los móviles oficiales del hospital.
+          </p>
+          <button
+            type="button"
+            onClick={handleOpenCreate}
+            className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl text-xs transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Registrar Primera Ambulancia</span>
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {filteredAmbulancias.map(amb => {
+            const alerta = getAlertaMantencion(amb);
 
-          return (
-            <div
-              key={amb.patente}
-              className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition-shadow flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <span className="text-sm font-black text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg tracking-wider border border-slate-300">
-                      {amb.patente}
+            return (
+              <div
+                key={amb.patente}
+                className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition-shadow flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <span className="text-sm font-black text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg tracking-wider border border-slate-300">
+                        {amb.patente}
+                      </span>
+                      <h3 className="font-bold text-slate-800 text-sm mt-2">{amb.nombreMovil}</h3>
+                      <p className="text-xs text-slate-500">{amb.marca} {amb.modelo} ({amb.anio})</p>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                      amb.estado === 'operativa' 
+                        ? 'bg-emerald-100 text-emerald-800' 
+                        : amb.estado === 'en_mantencion'
+                        ? 'bg-amber-100 text-amber-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {amb.estado === 'operativa' ? 'Operativa' : amb.estado === 'en_mantencion' ? 'En Taller' : 'Fuera Serv.'}
                     </span>
-                    <h3 className="font-bold text-slate-800 text-sm mt-2">{amb.nombreMovil}</h3>
-                    <p className="text-xs text-slate-500">{amb.marca} {amb.modelo} ({amb.anio})</p>
                   </div>
-                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
-                    amb.estado === 'operativa' 
-                      ? 'bg-emerald-100 text-emerald-800' 
-                      : amb.estado === 'en_mantencion'
-                      ? 'bg-amber-100 text-amber-800'
-                      : 'bg-red-100 text-red-800'
-                  }`}>
-                    {amb.estado === 'operativa' ? 'Operativa' : amb.estado === 'en_mantencion' ? 'En Taller' : 'Fuera Serv.'}
-                  </span>
+
+                  {/* Alerta de Mantenimiento Preventivo */}
+                  {alerta && (
+                    <div className={`p-2.5 rounded-xl border mb-3 flex items-center gap-2 text-xs font-bold ${alerta.color}`}>
+                      <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                      <span>{alerta.texto}</span>
+                    </div>
+                  )}
+
+                  {/* Métricas clave */}
+                  <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100 mb-3">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Km Actual</span>
+                      <strong className="text-slate-800">{amb.kilometrajeActual.toLocaleString('es-CL')} km</strong>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Próx. Mantención</span>
+                      <strong className="text-slate-800">{amb.proximoMantenimientoKm.toLocaleString('es-CL')} km</strong>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Fecha Comprometida</span>
+                      <span>{amb.proximoMantenimientoFecha || "S/F"}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Taller</span>
+                      <span className="truncate">{amb.tallerAsignado || "Interno"}</span>
+                    </div>
+                  </div>
+
+                  {amb.observaciones && (
+                    <p className="text-[11px] text-slate-500 italic mb-2">"{amb.observaciones}"</p>
+                  )}
                 </div>
 
-                {/* Alerta de Mantenimiento Preventivo */}
-                {alerta && (
-                  <div className={`p-2.5 rounded-xl border mb-3 flex items-center gap-2 text-xs font-bold ${alerta.color}`}>
-                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                    <span>{alerta.texto}</span>
-                  </div>
-                )}
-
-                {/* Métricas clave */}
-                <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100 mb-3">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Km Actual</span>
-                    <strong className="text-slate-800">{amb.kilometrajeActual.toLocaleString('es-CL')} km</strong>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Próx. Mantención</span>
-                    <strong className="text-slate-800">{amb.proximoMantenimientoKm.toLocaleString('es-CL')} km</strong>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Fecha Comprometida</span>
-                    <span>{amb.proximoMantenimientoFecha || "S/F"}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Taller</span>
-                    <span className="truncate">{amb.tallerAsignado || "Interno"}</span>
-                  </div>
+                <div className="pt-2 border-t border-slate-100 flex justify-end items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteAmbulancia(amb.patente, amb.nombreMovil)}
+                    className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Dar de baja móvil"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Dar de Baja</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEdit(amb)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-50 rounded-lg transition-colors"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>Editar Móvil</span>
+                  </button>
                 </div>
-
-                {amb.observaciones && (
-                  <p className="text-[11px] text-slate-500 italic mb-2">"{amb.observaciones}"</p>
-                )}
               </div>
-
-              <div className="pt-2 border-t border-slate-100 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => handleOpenEdit(amb)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-50 rounded-lg transition-colors"
-                >
-                  <Edit3 className="w-3.5 h-3.5" />
-                  <span>Editar Móvil</span>
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Modal Crear / Editar */}
       {isModalOpen && (

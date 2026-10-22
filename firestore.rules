@@ -71,8 +71,8 @@ service cloud.firestore {
       // Only Transporte or Admin can update/create ambulancias
       allow create, update: if hasRole(['transporte', 'admin']);
 
-      // No deletion
-      allow delete: if false;
+      // Only Transporte or Admin can delete ambulancias
+      allow delete: if isAdmin() || hasRole(['transporte']);
     }
 
     // ─── Colección: entregas_turno ────────────────────────────────────────────

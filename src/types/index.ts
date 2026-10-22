@@ -32,6 +32,8 @@ export interface Ambulancia {
   proximoMantenimientoFecha: string;
   tallerAsignado?: string;
   observaciones?: string;
+  eliminado?: boolean;
+  activo?: boolean;
 }
 
 export interface SignatureData {
