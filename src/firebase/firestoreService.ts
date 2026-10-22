@@ -351,10 +351,18 @@ export async function saveNovedad(novedad: Novedad): Promise<void> {
   if (!isNonEmpty(novedad.patente)) throw new Error("Novedad debe tener patente.");
   if (!isNonEmpty(novedad.itemAfectado)) throw new Error("Novedad debe identificar el ítem afectado.");
 
+  // Remove undefined properties before persisting to prevent Firestore serialization rejection
+  const cleanData: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(novedad)) {
+    if (v !== undefined) {
+      cleanData[k] = v;
+    }
+  }
+
   await setDoc(
     doc(db, "novedades", novedad.id),
     {
-      ...novedad,
+      ...cleanData,
       actualizadoEn: serverTimestamp(),
     },
     { merge: true }
@@ -369,8 +377,15 @@ export async function addAccionNovedad(
   novedadId: string,
   accion: { usuario: string; comentario: string; nuevoEstado: string }
 ): Promise<void> {
+  const cleanAccion: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(accion)) {
+    if (v !== undefined) {
+      cleanAccion[k] = v;
+    }
+  }
+
   await addDoc(collection(db, "novedades", novedadId, "acciones"), {
-    ...accion,
+    ...cleanAccion,
     fecha: serverTimestamp(),
   });
 }

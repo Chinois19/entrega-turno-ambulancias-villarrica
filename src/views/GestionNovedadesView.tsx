@@ -35,17 +35,27 @@ export const GestionNovedadesView: React.FC = () => {
     return () => unsub();
   }, []);
 
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successToast, setSuccessToast] = useState<string | null>(null);
+
   const handleOpenModal = (nov: Novedad) => {
     setNovedadSeleccionada(nov);
     setNuevoEstado(nov.estado);
     setComentarioAccion('');
+    setErrorMsg(null);
   };
 
   const handleSaveGestion = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!novedadSeleccionada || !comentarioAccion.trim()) return;
+    if (!novedadSeleccionada) return;
+    if (!comentarioAccion.trim()) {
+      setErrorMsg("Debe ingresar un comentario o detalle de la acción realizada.");
+      return;
+    }
 
     setIsUpdating(true);
+    setErrorMsg(null);
+
     try {
       const now = new Date().toISOString();
 
@@ -53,9 +63,9 @@ export const GestionNovedadesView: React.FC = () => {
       const updatedNovedad: Novedad = {
         ...novedadSeleccionada,
         estado: nuevoEstado,
-        resueltoPor: nuevoEstado === 'resuelta' ? currentUser?.nombre : novedadSeleccionada.resueltoPor,
-        resueltoEn: nuevoEstado === 'resuelta' ? now : novedadSeleccionada.resueltoEn,
-        resolucionFinal: nuevoEstado === 'resuelta' ? comentarioAccion : novedadSeleccionada.resolucionFinal
+        resueltoPor: nuevoEstado === 'resuelta' ? (currentUser?.nombre || 'Encargado') : (novedadSeleccionada.resueltoPor || ''),
+        resueltoEn: nuevoEstado === 'resuelta' ? now : (novedadSeleccionada.resueltoEn || ''),
+        resolucionFinal: nuevoEstado === 'resuelta' ? comentarioAccion.trim() : (novedadSeleccionada.resolucionFinal || '')
       };
       await saveNovedad(updatedNovedad);
 
@@ -66,10 +76,13 @@ export const GestionNovedadesView: React.FC = () => {
         nuevoEstado
       });
 
+      setSuccessToast(`Gestión registrada exitosamente. Estado actualizado a: ${nuevoEstado.toUpperCase()}`);
       setNovedadSeleccionada(null);
       setComentarioAccion('');
-    } catch (err) {
+      setTimeout(() => setSuccessToast(null), 5000);
+    } catch (err: any) {
       console.error('Error al actualizar novedad:', err);
+      setErrorMsg(err?.message || "Ocurrió un error al guardar la gestión. Verifique permisos o conexión.");
     } finally {
       setIsUpdating(false);
     }
@@ -120,6 +133,21 @@ export const GestionNovedadesView: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Toast de Éxito Flotante */}
+      {successToast && (
+        <div className="fixed top-20 right-4 z-50 max-w-md bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 animate-bounce border-2 border-emerald-400">
+          <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+          <p className="text-xs font-bold leading-tight flex-1">{successToast}</p>
+          <button 
+            type="button" 
+            onClick={() => setSuccessToast(null)} 
+            className="text-emerald-200 hover:text-white font-black text-sm"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-sky-900 to-slate-900 rounded-2xl p-6 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -311,6 +339,13 @@ export const GestionNovedadesView: React.FC = () => {
 
             {/* Formulario de Nueva Intervención */}
             <form onSubmit={handleSaveGestion} className="space-y-4 pt-2 border-t border-slate-100">
+              {errorMsg && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0" />
+                  <span>{errorMsg}</span>
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                   Actualizar Estado de la Novedad
