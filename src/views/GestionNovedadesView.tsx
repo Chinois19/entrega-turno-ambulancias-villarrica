@@ -81,10 +81,10 @@ export const GestionNovedadesView: React.FC = () => {
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       return (
-        n.patente.toLowerCase().includes(term) ||
-        n.itemAfectado.toLowerCase().includes(term) ||
-        n.descripcion.toLowerCase().includes(term) ||
-        n.folioTurno.toLowerCase().includes(term)
+        (n.patente || '').toLowerCase().includes(term) ||
+        (n.itemAfectado || '').toLowerCase().includes(term) ||
+        (n.descripcion || '').toLowerCase().includes(term) ||
+        (n.folioTurno || '').toLowerCase().includes(term)
       );
     }
     return true;
@@ -215,22 +215,26 @@ export const GestionNovedadesView: React.FC = () => {
             >
               <div className="space-y-1.5 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-black text-slate-800 bg-slate-100 px-2.5 py-1 rounded-lg">
-                    {nov.patente}
-                  </span>
+                  {nov.patente && (
+                    <span className="text-xs font-black text-slate-800 bg-slate-100 px-2.5 py-1 rounded-lg">
+                      {nov.patente}
+                    </span>
+                  )}
                   {getCriticidadBadge(nov.criticidad)}
                   {getEstadoBadge(nov.estado)}
                   <span className="text-xs text-slate-400 font-medium">
-                    Folio: {nov.folioTurno} • Origen: {nov.tipoOrigen.toUpperCase()}
+                    Folio: {nov.folioTurno || 'S/F'} • Origen: {(nov.tipoOrigen || 'general').toUpperCase()}
                   </span>
                 </div>
 
                 <h4 className="font-bold text-slate-800 text-sm">{nov.itemAfectado}</h4>
                 <p className="text-xs text-slate-600 line-clamp-2">{nov.descripcion}</p>
 
-                <div className="flex items-center gap-4 text-[11px] text-slate-400 pt-1">
-                  <span>Reportado por: <strong>{nov.reportadoPor}</strong></span>
-                  <span>Fecha: {new Date(nov.reportadoEn).toLocaleString('es-CL')}</span>
+                <div className="flex items-center gap-4 text-[11px] text-slate-400 pt-1 flex-wrap">
+                  <span>Reportado por: <strong>{nov.reportadoPor || 'Sistema'}</strong></span>
+                  <span>
+                    Fecha: {nov.reportadoEn ? new Date(nov.reportadoEn).toLocaleString('es-CL') : 'Sin fecha'}
+                  </span>
                   {nov.accionesRealizadas && nov.accionesRealizadas.length > 0 && (
                     <span className="text-sky-600 font-semibold">
                       {nov.accionesRealizadas.length} gestiones registradas

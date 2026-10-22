@@ -14,7 +14,8 @@ import {
   Check, 
   AlertCircle,
   Truck,
-  RotateCcw
+  RotateCcw,
+  X
 } from 'lucide-react';
 
 export const FormularioConductorView: React.FC = () => {
@@ -273,6 +274,7 @@ export const FormularioConductorView: React.FC = () => {
 
       await saveTurno(nuevoTurno);
       setSuccessMessage(`Turno ${folio} registrado con éxito. Se guardó el check mecánico y las firmas digitales.`);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       
       // Reset firmas y observaciones
       setFirmaSaliente('');
@@ -281,6 +283,7 @@ export const FormularioConductorView: React.FC = () => {
       setObsEntrante('');
     } catch (err: any) {
       setErrorMessage(err.message || "Error al registrar la entrega de turno.");
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setIsSubmitting(false);
     }
@@ -301,17 +304,60 @@ export const FormularioConductorView: React.FC = () => {
         </div>
       </div>
 
+      {/* Notificación Flotante de Alta Visibilidad (Visible sin importar el scroll) */}
       {successMessage && (
-        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center gap-3">
-          <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-          <span className="text-sm font-medium">{successMessage}</span>
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 max-w-xl w-[92%] animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-sky-700 text-white shadow-2xl border-2 border-emerald-300/40 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-white/20 rounded-xl">
+                <CheckCircle className="w-6 h-6 text-emerald-100 flex-shrink-0" />
+              </div>
+              <div>
+                <p className="text-xs uppercase font-extrabold tracking-wider text-emerald-200">
+                  ¡Turno de Conductor Registrado Exitosamente!
+                </p>
+                <p className="text-sm font-bold text-white leading-tight">
+                  {successMessage}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSuccessMessage(null)}
+              className="p-1.5 hover:bg-white/20 rounded-lg text-emerald-100 hover:text-white transition-colors"
+              title="Cerrar notificación"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
       )}
 
       {errorMessage && (
-        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
-          <span className="text-sm font-medium">{errorMessage}</span>
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 max-w-xl w-[92%] animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-red-600 to-rose-700 text-white shadow-2xl border-2 border-red-300/40 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-white/20 rounded-xl">
+                <AlertCircle className="w-6 h-6 text-red-100 flex-shrink-0" />
+              </div>
+              <div>
+                <p className="text-xs uppercase font-extrabold tracking-wider text-red-200">
+                  Atención requerida
+                </p>
+                <p className="text-sm font-bold text-white leading-tight">
+                  {errorMessage}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setErrorMessage(null)}
+              className="p-1.5 hover:bg-white/20 rounded-lg text-red-100 hover:text-white transition-colors"
+              title="Cerrar notificación"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
       )}
 

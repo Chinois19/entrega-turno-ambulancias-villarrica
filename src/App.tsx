@@ -23,9 +23,22 @@ import {
 } from 'lucide-react';
 
 export function App() {
-  const { currentUser, logout, hasRole } = useAuth();
+  const { currentUser, loading, logout, hasRole } = useAuth();
   const [activeTab, setActiveTab] = useState<string>('default');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Mientras Firebase verifica la sesión activa (al hacer F5 o recargar)
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white p-4">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center mb-4 shadow-xl shadow-sky-500/20 animate-pulse">
+          <Ambulance className="w-6 h-6 text-white" />
+        </div>
+        <p className="font-bold text-sm tracking-wide">Cargando Sistema Hospitalario...</p>
+        <span className="text-xs text-slate-400 mt-1">Verificando sesión segura • Hospital de Villarrica</span>
+      </div>
+    );
+  }
 
   // If not logged in, render Login
   if (!currentUser) {
