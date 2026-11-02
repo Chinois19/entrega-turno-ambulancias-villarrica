@@ -9,7 +9,13 @@ import {
   reactivarCuentaUsuario, 
   verificarRutBloqueado 
 } from '../firebase/firestoreService';
-import { validateRut, formatRut, rutToAuthEmail } from '../utils/authUtils';
+import { 
+  validateRut, 
+  formatRut, 
+  rutToAuthEmail,
+  formatProperName,
+  validateFullNameWords 
+} from '../utils/authUtils';
 import { initializeApp, getApps, deleteApp } from 'firebase/app';
 import {
   getAuth,
@@ -111,11 +117,22 @@ export const MantenedorUsuariosView: React.FC = () => {
     setErrorMsg(null);
     setEmailSentTo(null);
 
+    if (!nombre.trim()) {
+      setErrorMsg('El nombre del funcionario es requerido.');
+      return;
+    }
+
+    if (!validateFullNameWords(nombre)) {
+      setErrorMsg('El nombre debe incluir al menos un nombre y dos apellidos (mínimo 3 palabras, ej: Aldo Balladares González).');
+      return;
+    }
+
     if (!validateRut(rut)) {
       setErrorMsg('El RUN ingresado no es válido (Verificación Módulo 11).');
       return;
     }
 
+    const normalizedNombre = formatProperName(nombre);
     const cleanRut = formatRut(rut);
     const cleanedDigits = cleanRut.replace(/[^0-9kK]/g, '').toLowerCase();
 
@@ -171,7 +188,7 @@ export const MantenedorUsuariosView: React.FC = () => {
         try {
           const roleLabel = rol === 'conductor' ? 'Conductor' : rol === 'tens' ? 'TENS' : rol === 'calidad' ? 'Encargada de Calidad' : 'Encargado Transporte';
           const mailRes = await sendWelcomeEmail({
-            to_name: nombre.trim(),
+            to_name: normalizedNombre,
             to_email: contactEmail,
             to_rut: cleanRut,
             temp_password: tempPass,
@@ -194,7 +211,7 @@ export const MantenedorUsuariosView: React.FC = () => {
       // 5. Guardar perfil en Firestore
       const newUser: AppUser = {
         id: uid,
-        nombre: nombre.trim(),
+        nombre: normalizedNombre,
         rut: cleanRut,
         email: contactEmail || authEmail,
         rol,
@@ -208,7 +225,7 @@ export const MantenedorUsuariosView: React.FC = () => {
       await saveUsuario(newUser);
 
       // 6. Vincular siempre RUT -> Email para inicio de sesión transparente con RUT
-      await saveRutLookup(cleanedDigits, authEmail, nombre.trim());
+      await saveRutLookup(cleanedDigits, authEmail, normalizedNombre);
 
       await loadUsuarios();
       setGeneratedPassword(tempPass);
@@ -268,8 +285,16 @@ export const MantenedorUsuariosView: React.FC = () => {
       return;
     }
 
+    // Al editar se permite conservar el nombre previo si ya tenía menos palabras
+    const isNameChanged = editNombre.trim() !== userToEdit.nombre.trim();
+    if (isNameChanged && !validateFullNameWords(editNombre)) {
+      setEditError('Al modificar el nombre debe incluir al menos un nombre y dos apellidos (mínimo 3 palabras, ej: Aldo Balladares González).');
+      return;
+    }
+
     setEditSaving(true);
     try {
+      const normalizedNombre = formatProperName(editNombre);
       const cleanRut = formatRut(editRut || userToEdit.rut);
       const cleanedDigits = cleanRut.replace(/[^0-9kK]/g, '').toLowerCase();
       const hasRealEmail = editEmail.trim().includes('@');
@@ -285,7 +310,7 @@ export const MantenedorUsuariosView: React.FC = () => {
 
       const updatedUser: AppUser = {
         ...userToEdit,
-        nombre: editNombre.trim(),
+        nombre: normalizedNombre,
         rut: cleanRut,
         email: userDisplayEmail,
         rol: editRol,
@@ -296,7 +321,7 @@ export const MantenedorUsuariosView: React.FC = () => {
       await saveUsuario(updatedUser);
 
       // Actualizar mapeo en rut_lookup de forma definitiva
-      await saveRutLookup(cleanedDigits, userDisplayEmail, editNombre.trim());
+      await saveRutLookup(cleanedDigits, userDisplayEmail, normalizedNombre);
 
       // Si se solicitó nueva clave provisoria y el usuario tiene correo:
       if (newTempPass && hasRealEmail) {
@@ -574,7 +599,7 @@ export const MantenedorUsuariosView: React.FC = () => {
                 filteredUsuarios.map(u => (
                   <tr key={u.id} className="hover:bg-slate-50 transition-colors">
                     <td className="py-3.5 px-4 font-bold text-slate-800">
-                      {u.nombre}
+                      {formatProperName(u.nombre)}
                       {u.cargo && <span className="block text-[11px] text-slate-400 font-normal">{u.cargo}</span>}
                       {u.eliminado && u.motivoBaja && (
                         <span className="block text-[10px] text-red-600 font-medium mt-0.5">
@@ -808,13 +833,14 @@ export const MantenedorUsuariosView: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                      Nombre Completo
+                      Nombre Completo <span className="text-slate-400 font-normal lowercase">(al menos un nombre y dos apellidos)</span>
                     </label>
                     <input
                       type="text"
                       required
                       value={editNombre}
                       onChange={e => setEditNombre(e.target.value)}
+                      placeholder="Ej: Aldo Balladares González"
                       className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold"
                     />
                   </div>
@@ -1079,7 +1105,7 @@ export const MantenedorUsuariosView: React.FC = () => {
               <form onSubmit={handleCreateUser} className="space-y-3.5">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Nombre Completo
+                    Nombre Completo <span className="text-slate-400 font-normal lowercase">(al menos un nombre y dos apellidos)</span>
                   </label>
                   <input
                     type="text"

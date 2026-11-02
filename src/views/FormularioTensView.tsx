@@ -40,7 +40,6 @@ export const FormularioTensView: React.FC = () => {
 
     // Camilla
     camillaSujecionSuperior: 'Operativo',
-    camillaSujecionMedio: 'Operativo',
     camillaSujecionInferior: 'Operativo',
     camillaAnclajePiso: 'Operativo',
 
@@ -138,7 +137,6 @@ export const FormularioTensView: React.FC = () => {
 
       // Evaluación de anclaje de camilla
       if (checklist.camillaSujecionSuperior === 'No Operativo' || 
-          checklist.camillaSujecionMedio === 'No Operativo' || 
           checklist.camillaSujecionInferior === 'No Operativo' ||
           checklist.camillaAnclajePiso === 'No Operativo') {
         novedades.push({
@@ -431,18 +429,6 @@ export const FormularioTensView: React.FC = () => {
                   <select
                     value={checklist.camillaSujecionSuperior}
                     onChange={e => setChecklist({ ...checklist, camillaSujecionSuperior: e.target.value as any })}
-                    className="px-2 py-1 rounded border border-slate-300 bg-white"
-                  >
-                    <option value="Operativo">Operativo</option>
-                    <option value="No Operativo">No Operativo</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span>Sistema Sujeción Medio:</span>
-                  <select
-                    value={checklist.camillaSujecionMedio}
-                    onChange={e => setChecklist({ ...checklist, camillaSujecionMedio: e.target.value as any })}
                     className="px-2 py-1 rounded border border-slate-300 bg-white"
                   >
                     <option value="Operativo">Operativo</option>

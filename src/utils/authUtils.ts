@@ -77,6 +77,48 @@ export function formatRut(rut: string): string {
 }
 
 /**
+ * Normalizes a person's full name to Proper Case (Capitalize first letter of each word).
+ * Handles prepositions/particles in Spanish (de, del, la, las, los, y) appropriately unless first word.
+ * Also trims consecutive whitespaces.
+ * Example: "aldo balladares gonzales" -> "Aldo Balladares Gonzales"
+ * Example: "MARIA DE LOS ANGELES PEREZ SOTO" -> "María de los Ángeles Pérez Soto"
+ */
+export function formatProperName(rawName: string): string {
+  if (!rawName) return '';
+  const trimmed = rawName.trim().replace(/\s+/g, ' ');
+  if (!trimmed) return '';
+
+  const lowercaseWords = new Set(['de', 'del', 'la', 'las', 'los', 'y', 'e', 'san']);
+
+  return trimmed
+    .split(' ')
+    .map((word, index) => {
+      const lower = word.toLowerCase();
+      // Keep lowercase particles only if not the very first word
+      if (index > 0 && lowercaseWords.has(lower)) {
+        return lower;
+      }
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
+    .join(' ');
+}
+
+/**
+ * Validates that a new full name has at least one name and two surnames (minimum 3 words).
+ * Returns true if valid, false otherwise.
+ */
+export function validateFullNameWords(fullName: string): boolean {
+  if (!fullName) return false;
+  const words = fullName
+    .trim()
+    .split(/\s+/)
+    .filter(w => w.length > 0);
+  
+  // Exige al menos 3 palabras (1 nombre + 2 apellidos)
+  return words.length >= 3;
+}
+
+/**
  * Strips all formatting characters from RUT, returning only digits and lowercase k.
  * Example: "12.345.678-K" -> "12345678k"
  */

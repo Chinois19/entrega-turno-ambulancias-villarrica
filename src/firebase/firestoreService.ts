@@ -14,6 +14,7 @@ import {
   where,
   writeBatch,
   deleteDoc,
+  deleteField,
 } from "firebase/firestore";
 import {
   ref as storageRef,
@@ -348,6 +349,100 @@ export async function updateTurnoParcial(turnoId: string, updates: Partial<Turno
     ...cleanUpdates,
     actualizadoEn: serverTimestamp(),
   });
+}
+
+/**
+ * Delete ONLY the Conductor record from a turno:
+ * Removes conductorSaliente, conductorEntrante, observaciones, and checklistConductor.
+ * If TENS record is also empty, deletes the entire document. Otherwise updates status to 'pendiente_conductor'.
+ */
+export async function deleteRegistroConductor(turnoId: string): Promise<{ deletedEntireTurno: boolean }> {
+  const snap = await getDoc(doc(db, "entregas_turno", turnoId));
+  if (!snap.exists()) return { deletedEntireTurno: false };
+
+  const data = snap.data() as TurnoEntrega;
+  const hasTens = Boolean(data.tensSaliente || data.checklistTens);
+
+  // Cascade delete any novedades originating from conductor
+  try {
+    const novSnap = await getDocs(
+      query(
+        collection(db, "novedades"),
+        where("turnoId", "==", turnoId),
+        where("tipoOrigen", "==", "conductor")
+      )
+    );
+    for (const d of novSnap.docs) {
+      await deleteDoc(d.ref);
+    }
+  } catch (e) {
+    console.warn("Error eliminando novedades de conductor:", e);
+  }
+
+  if (!hasTens) {
+    // If there is no TENS record, we can safely delete the whole document
+    await deleteDoc(doc(db, "entregas_turno", turnoId));
+    return { deletedEntireTurno: true };
+  } else {
+    // Keep TENS record intact, clear only conductor fields
+    await updateDoc(doc(db, "entregas_turno", turnoId), {
+      conductorSaliente: deleteField(),
+      conductorEntrante: deleteField(),
+      observacionesConductorSaliente: deleteField(),
+      observacionesConductorEntrante: deleteField(),
+      checklistConductor: deleteField(),
+      estado: 'pendiente_conductor',
+      actualizadoEn: serverTimestamp(),
+    });
+    return { deletedEntireTurno: false };
+  }
+}
+
+/**
+ * Delete ONLY the TENS record from a turno:
+ * Removes tensSaliente, tensEntrante, observaciones, and checklistTens.
+ * If Conductor record is also empty, deletes the entire document. Otherwise updates status to 'pendiente_tens'.
+ */
+export async function deleteRegistroTens(turnoId: string): Promise<{ deletedEntireTurno: boolean }> {
+  const snap = await getDoc(doc(db, "entregas_turno", turnoId));
+  if (!snap.exists()) return { deletedEntireTurno: false };
+
+  const data = snap.data() as TurnoEntrega;
+  const hasConductor = Boolean(data.conductorSaliente || data.checklistConductor);
+
+  // Cascade delete any novedades originating from TENS
+  try {
+    const novSnap = await getDocs(
+      query(
+        collection(db, "novedades"),
+        where("turnoId", "==", turnoId),
+        where("tipoOrigen", "==", "tens")
+      )
+    );
+    for (const d of novSnap.docs) {
+      await deleteDoc(d.ref);
+    }
+  } catch (e) {
+    console.warn("Error eliminando novedades de tens:", e);
+  }
+
+  if (!hasConductor) {
+    // If there is no conductor record, delete whole document
+    await deleteDoc(doc(db, "entregas_turno", turnoId));
+    return { deletedEntireTurno: true };
+  } else {
+    // Keep Conductor record intact, clear only TENS fields
+    await updateDoc(doc(db, "entregas_turno", turnoId), {
+      tensSaliente: deleteField(),
+      tensEntrante: deleteField(),
+      observacionesTensSaliente: deleteField(),
+      observacionesTensEntrante: deleteField(),
+      checklistTens: deleteField(),
+      estado: 'pendiente_tens',
+      actualizadoEn: serverTimestamp(),
+    });
+    return { deletedEntireTurno: false };
+  }
 }
 
 /**

@@ -7,6 +7,7 @@ import { GestionNovedadesView } from './views/GestionNovedadesView';
 import { MantenedorMovilesView } from './views/MantenedorMovilesView';
 import { MantenedorUsuariosView } from './views/MantenedorUsuariosView';
 import { DashboardGestionView } from './views/DashboardGestionView';
+import { DocumentosContingenciaView } from './views/DocumentosContingenciaView';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { 
   Ambulance, 
@@ -19,7 +20,8 @@ import {
   ShieldCheck, 
   Menu, 
   X,
-  FileText
+  FileText,
+  FileDown
 } from 'lucide-react';
 
 export function App() {
@@ -175,6 +177,20 @@ export function App() {
                 </button>
               </>
             )}
+
+            {/* Documentos de Contingencia: Disponible para TODOS los perfiles */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('contingencia')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                currentTab === 'contingencia' 
+                  ? 'bg-amber-600 text-white shadow-md' 
+                  : 'text-amber-300 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <FileDown className="w-4 h-4 text-amber-400" />
+              <span>Documentos Contingencia</span>
+            </button>
           </nav>
 
           {/* User profile & Logout */}
@@ -286,6 +302,18 @@ export function App() {
                 </button>
               </>
             )}
+
+            {/* Documentos Contingencia para todos los perfiles en Móvil */}
+            <button
+              type="button"
+              onClick={() => { setActiveTab('contingencia'); setMobileMenuOpen(false); }}
+              className={`w-full flex items-center gap-2 p-2.5 rounded-xl text-xs font-bold ${
+                currentTab === 'contingencia' ? 'bg-amber-600 text-white' : 'text-amber-300'
+              }`}
+            >
+              <FileDown className="w-4 h-4 text-amber-400" />
+              <span>Documentos Contingencia</span>
+            </button>
           </div>
         )}
       </header>
@@ -298,6 +326,7 @@ export function App() {
         {currentTab === 'novedades' && canSeeGestion && <GestionNovedadesView />}
         {currentTab === 'moviles' && canSeeGestion && <MantenedorMovilesView />}
         {currentTab === 'usuarios' && canSeeGestion && <MantenedorUsuariosView />}
+        {currentTab === 'contingencia' && <DocumentosContingenciaView />}
       </main>
 
       {/* Footer */}

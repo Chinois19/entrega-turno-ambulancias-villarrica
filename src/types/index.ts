@@ -61,6 +61,7 @@ export interface ChecklistConductor {
   nivelLiquidoFrenos: 'Normal' | 'Bajo' | 'Critico';
   nivelLiquidoDireccion: 'Normal' | 'Bajo' | 'Critico';
   nivelCombustible: '1/4' | '1/2' | '3/4' | 'Lleno';
+  estadoAdBlue?: 'Normal' | 'Bajo' | 'Critico' | 'No Aplica';
 
   // Exterior & Mecánica
   estadoNeumaticos: 'Bueno' | 'Regular' | 'Malo';
@@ -95,7 +96,7 @@ export interface ChecklistTens {
 
   // Camilla y Sujeción
   camillaSujecionSuperior: 'Operativo' | 'No Operativo';
-  camillaSujecionMedio: 'Operativo' | 'No Operativo';
+  camillaSujecionMedio?: 'Operativo' | 'No Operativo'; // Deprecado/Retirado
   camillaSujecionInferior: 'Operativo' | 'No Operativo';
   camillaAnclajePiso: 'Operativo' | 'No Operativo';
 

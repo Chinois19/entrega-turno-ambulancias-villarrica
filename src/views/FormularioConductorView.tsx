@@ -51,6 +51,7 @@ export const FormularioConductorView: React.FC = () => {
     nivelLiquidoFrenos: 'Normal',
     nivelLiquidoDireccion: 'Normal',
     nivelCombustible: 'Lleno',
+    estadoAdBlue: 'Normal',
     estadoNeumaticos: 'Bueno',
     presionNeumaticos: true,
     estadoPlumillas: 'Bueno',
@@ -177,6 +178,24 @@ export const FormularioConductorView: React.FC = () => {
           itemAfectado: 'Nivel de Aceite de Motor',
           descripcion: `Nivel de aceite detectado en estado: ${checklist.nivelAceite}. Requiere inspección/relleno inmediato.`,
           criticidad: checklist.nivelAceite === 'Critico' ? 'critica' : 'media',
+          estado: 'pendiente',
+          reportadoPor: nombreSaliente,
+          reportadoEn: now,
+          asignadoA: 'transporte'
+        });
+      }
+
+      if (checklist.estadoAdBlue === 'Critico' || checklist.estadoAdBlue === 'Bajo') {
+        novedadesParaCrear.push({
+          id: `nov-${Date.now()}-adblue`,
+          turnoId: folio,
+          folioTurno: folio,
+          patente: selectedPatente,
+          tipoOrigen: 'conductor',
+          categoria: 'mecanica',
+          itemAfectado: 'Sistema AdBlue',
+          descripcion: `Nivel de AdBlue detectado en estado: ${checklist.estadoAdBlue}. Riesgo de bloqueo del motor diésel o falla en catalizador SCR. Requiere recarga.`,
+          criticidad: checklist.estadoAdBlue === 'Critico' ? 'critica' : 'media',
           estado: 'pendiente',
           reportadoPor: nombreSaliente,
           reportadoEn: now,
@@ -602,6 +621,20 @@ export const FormularioConductorView: React.FC = () => {
                 <option value="Normal">Normal</option>
                 <option value="Bajo">Bajo</option>
                 <option value="Critico">Crítico</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-600 mb-1">Estado de sistema Sistema AdBlue</label>
+              <select
+                value={checklist.estadoAdBlue || 'Normal'}
+                onChange={e => setChecklist({ ...checklist, estadoAdBlue: e.target.value as any })}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold bg-white"
+              >
+                <option value="Normal">Normal</option>
+                <option value="Bajo">Bajo</option>
+                <option value="Critico">Crítico</option>
+                <option value="No Aplica">No Aplica</option>
               </select>
             </div>
 
