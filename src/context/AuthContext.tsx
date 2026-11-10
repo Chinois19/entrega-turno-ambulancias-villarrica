@@ -111,7 +111,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const authEmail = await resolveAuthEmail(input);
-      const cred = await signInWithEmailAndPassword(auth, authEmail, password);
+      let cred;
+      try {
+        cred = await signInWithEmailAndPassword(auth, authEmail, password);
+      } catch (primaryErr: any) {
+        // Fallback: if this is a RUT login and rut_lookup pointed to a contact email instead of the
+        // original institutional @hospitalvillarrica.cl authEmail, try the institutional authEmail automatically.
+        const cleanDigits = input.replace(/[^0-9kK]/g, "").toLowerCase();
+        const fallbackInstitutionalEmail = `${cleanDigits}@hospitalvillarrica.cl`;
+        if (
+          !input.includes("@") &&
+          cleanDigits.length >= 7 &&
+          authEmail !== fallbackInstitutionalEmail
+        ) {
+          cred = await signInWithEmailAndPassword(auth, fallbackInstitutionalEmail, password);
+        } else {
+          throw primaryErr;
+        }
+      }
 
       // Sync encrypted password & hash into `usuarios` collection on login
       // so Admin and Jefe de Transporte always have accurate visibility of active credentials
@@ -122,8 +139,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ]);
         const existingProfile = await getUsuarioByUid(cred.user.uid);
         if (existingProfile) {
+          const activeAuthEmail = cred.user.email || existingProfile.authEmail;
           await saveUsuario({
             ...existingProfile,
+            authEmail: activeAuthEmail,
             passwordHash: pHash,
             passwordEncrypted: pEnc,
           });
