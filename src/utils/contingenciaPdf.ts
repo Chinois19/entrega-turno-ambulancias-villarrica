@@ -117,18 +117,23 @@ export function generarPdfContingenciaConductor(): void {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
 
-  for (let i = 0; i < itemsLeft.length; i++) {
+  const maxRows = Math.max(itemsLeft.length, itemsRight.length);
+  for (let i = 0; i < maxRows; i++) {
     const itL = itemsLeft[i];
     const itR = itemsRight[i];
 
     doc.rect(10, y, colW, 6.2, 'S');
     doc.rect(109.9, y, colW, 6.2, 'S');
 
-    doc.text(itL.label, 13, y + 4.2);
-    doc.text(itL.opts, 58, y + 4.2);
+    if (itL) {
+      doc.text(itL.label, 13, y + 4.2);
+      doc.text(itL.opts, 58, y + 4.2);
+    }
 
-    doc.text(itR.label, 113, y + 4.2);
-    doc.text(itR.opts, 160, y + 4.2);
+    if (itR) {
+      doc.text(itR.label, 113, y + 4.2);
+      doc.text(itR.opts, 160, y + 4.2);
+    }
 
     y += 6.2;
   }
@@ -315,18 +320,23 @@ export function generarPdfContingenciaTens(): void {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
 
-  for (let i = 0; i < itemsTensLeft.length; i++) {
+  const maxTensRows = Math.max(itemsTensLeft.length, itemsTensRight.length);
+  for (let i = 0; i < maxTensRows; i++) {
     const itL = itemsTensLeft[i];
     const itR = itemsTensRight[i];
 
     doc.rect(10, y, colW, 7, 'S');
     doc.rect(109.9, y, colW, 7, 'S');
 
-    doc.text(itL.label, 13, y + 4.5);
-    doc.text(itL.opts, 58, y + 4.5);
+    if (itL) {
+      doc.text(itL.label, 13, y + 4.5);
+      doc.text(itL.opts, 58, y + 4.5);
+    }
 
-    doc.text(itR.label, 113, y + 4.5);
-    doc.text(itR.opts, 160, y + 4.5);
+    if (itR) {
+      doc.text(itR.label, 113, y + 4.5);
+      doc.text(itR.opts, 160, y + 4.5);
+    }
 
     y += 7;
   }

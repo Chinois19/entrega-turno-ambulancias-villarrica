@@ -107,7 +107,7 @@ export const DocumentosContingenciaView: React.FC = () => {
             <div className="space-y-2 text-xs text-slate-600 border-t border-slate-100 pt-3 mb-6">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                <span>Niveles de fluidos (aceite, agua/refrigerante, frenos, combustible)</span>
+                <span>Niveles de fluidos (aceite, agua/refrigerante, frenos, combustible y Sistema AdBlue)</span>
               </div>
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
@@ -161,7 +161,7 @@ export const DocumentosContingenciaView: React.FC = () => {
             <div className="space-y-2 text-xs text-slate-600 border-t border-slate-100 pt-3 mb-6">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-teal-600 flex-shrink-0" />
-                <span>Sujeción de camilla (correas sup/med/inf y anclaje al piso)</span>
+                <span>Sujeción de camilla (correas superior/inferior y anclaje al piso)</span>
               </div>
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-teal-600 flex-shrink-0" />
