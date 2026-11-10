@@ -90,12 +90,43 @@ export async function getUsuarioByEmail(email: string): Promise<AppUser | null> 
  * ID must be the Firebase Auth UID.
  */
 export async function saveUsuario(usuario: AppUser): Promise<void> {
-  // Strip passwordHash before writing — credentials live in Firebase Auth only
-  const { passwordHash: _stripped, ...safeData } = usuario as AppUser & { passwordHash?: string };
+  // Clean undefined fields to prevent Firestore errors
+  const cleanData: Record<string, any> = {};
+  Object.entries(usuario).forEach(([k, v]) => {
+    if (v !== undefined) {
+      cleanData[k] = v;
+    }
+  });
   await setDoc(doc(db, "usuarios", usuario.id), {
-    ...safeData,
+    ...cleanData,
     actualizadoEn: serverTimestamp(),
   }, { merge: true });
+}
+
+/**
+ * Migrate user profile to a new Firebase Auth UID when Admin / Transporte forces a new password,
+ * preserving all profile fields, roles, and encrypted credentials in `usuarios`.
+ */
+export async function migrateUsuarioUid(oldUid: string, newProfile: AppUser): Promise<void> {
+  await saveUsuario(newProfile);
+  if (oldUid && oldUid !== newProfile.id) {
+    try {
+      await deleteDoc(doc(db, "usuarios", oldUid));
+    } catch {
+      // Ignore if old doc already removed
+    }
+  }
+}
+
+/**
+ * Subscribe in real time to all user profiles in `usuarios` collection.
+ */
+export function subscribeUsuarios(callback: (usuarios: AppUser[]) => void): () => void {
+  const q = query(collection(db, "usuarios"), orderBy("nombre"));
+  return onSnapshot(q, (snap) => {
+    const list = snap.docs.map((d) => ({ ...d.data(), id: d.id } as AppUser));
+    callback(list);
+  });
 }
 
 /**
@@ -202,13 +233,21 @@ export async function updateUltimoAcceso(uid: string): Promise<void> {
 }
 
 /**
- * Update isTemporaryPassword flag (after user sets their own password).
+ * Update isTemporaryPassword flag and encrypted password in `usuarios` collection (after user sets their own password).
  */
-export async function updateIsTemporaryPassword(uid: string, value: boolean): Promise<void> {
-  await updateDoc(doc(db, "usuarios", uid), {
+export async function updateIsTemporaryPassword(
+  uid: string,
+  value: boolean,
+  passwordHash?: string,
+  passwordEncrypted?: string
+): Promise<void> {
+  const payload: Record<string, any> = {
     isTemporaryPassword: value,
     actualizadoEn: serverTimestamp(),
-  });
+  };
+  if (passwordHash) payload.passwordHash = passwordHash;
+  if (passwordEncrypted) payload.passwordEncrypted = passwordEncrypted;
+  await updateDoc(doc(db, "usuarios", uid), payload);
 }
 
 /**

@@ -4,6 +4,8 @@ import { AppUser, UserRole } from '../types';
 import { 
   getUsuarios, 
   saveUsuario, 
+  migrateUsuarioUid,
+  subscribeUsuarios,
   saveRutLookup, 
   eliminarCuentaUsuario, 
   reactivarCuentaUsuario, 
@@ -14,12 +16,17 @@ import {
   formatRut, 
   rutToAuthEmail,
   formatProperName,
-  validateFullNameWords 
+  validateFullNameWords,
+  sha256Hash,
+  encryptPassword,
+  decryptPassword
 } from '../utils/authUtils';
 import { initializeApp, getApps, deleteApp } from 'firebase/app';
 import {
   getAuth,
   createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  updatePassword,
   sendPasswordResetEmail,
   signOut,
 } from 'firebase/auth';
@@ -47,7 +54,9 @@ import {
   UserCog,
   Save,
   Shield,
-  Edit3
+  Edit3,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 export const MantenedorUsuariosView: React.FC = () => {
@@ -90,14 +99,47 @@ export const MantenedorUsuariosView: React.FC = () => {
   const [copied, setCopied] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [customCreatePassword, setCustomCreatePassword] = useState('');
+
+  // Visibilidad de contraseñas desencriptadas en tiempo real para Admin y Transporte
+  const [decryptedPasswords, setDecryptedPasswords] = useState<Record<string, string>>({});
+  const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
+  const [copiedRowId, setCopiedRowId] = useState<string | null>(null);
 
   useEffect(() => {
-    loadUsuarios();
+    const unsubscribe = subscribeUsuarios(async (list) => {
+      setUsuarios(list);
+      const map: Record<string, string> = {};
+      for (const u of list) {
+        if (u.passwordEncrypted) {
+          map[u.id] = await decryptPassword(u.passwordEncrypted);
+        }
+      }
+      setDecryptedPasswords(map);
+    });
+    return () => unsubscribe();
   }, []);
 
   const loadUsuarios = async () => {
     const list = await getUsuarios();
     setUsuarios(list);
+    const map: Record<string, string> = {};
+    for (const u of list) {
+      if (u.passwordEncrypted) {
+        map[u.id] = await decryptPassword(u.passwordEncrypted);
+      }
+    }
+    setDecryptedPasswords(map);
+  };
+
+  const toggleShowPassword = (uid: string) => {
+    setVisiblePasswords(prev => ({ ...prev, [uid]: !prev[uid] }));
+  };
+
+  const copyRowPassword = (uid: string, pwd: string) => {
+    navigator.clipboard.writeText(pwd);
+    setCopiedRowId(uid);
+    setTimeout(() => setCopiedRowId(null), 2000);
   };
 
   const handleOpenCreate = () => {
@@ -106,10 +148,73 @@ export const MantenedorUsuariosView: React.FC = () => {
     setEmail('');
     setRol('conductor');
     setCargo('Conductor SAMU / Traslado');
+    setCustomCreatePassword('');
     setGeneratedPassword(null);
     setEmailSentTo(null);
     setErrorMsg(null);
     setIsModalOpen(true);
+  };
+
+  /**
+   * Provisions or updates a user's password directly in Firebase Auth using an isolated secondary instance,
+   * without requiring email verification links or disrupting the Admin's session.
+   * Returns { uid, authEmail }.
+   */
+  const forceProvisionAuthPassword = async (
+    cleanedDigits: string,
+    targetPassword: string,
+    existingUser?: AppUser
+  ): Promise<{ uid: string; authEmail: string }> => {
+    const helperName = `AdminAuthHelper_${Date.now()}`;
+    const secondaryApp = initializeApp(firebaseConfig, helperName);
+    const secondaryAuth = getAuth(secondaryApp);
+
+    try {
+      // 1. If editing an existing user and we have their decrypted old password, try updating in-place first
+      if (existingUser) {
+        const oldPlain = existingUser.passwordEncrypted
+          ? await decryptPassword(existingUser.passwordEncrypted)
+          : '';
+        const candidateAuthEmail = existingUser.authEmail || `${cleanedDigits}@hospitalvillarrica.cl`;
+
+        if (oldPlain) {
+          try {
+            const cred = await signInWithEmailAndPassword(secondaryAuth, candidateAuthEmail, oldPlain);
+            await updatePassword(cred.user, targetPassword);
+            const uid = cred.user.uid;
+            await signOut(secondaryAuth);
+            await deleteApp(secondaryApp).catch(() => {});
+            return { uid, authEmail: candidateAuthEmail };
+          } catch {
+            // Fall through to fresh credential slot creation
+          }
+        }
+      }
+
+      // 2. Try standard institutional authEmail first
+      const primaryAuthEmail = `${cleanedDigits}@hospitalvillarrica.cl`;
+      try {
+        const cred = await createUserWithEmailAndPassword(secondaryAuth, primaryAuthEmail, targetPassword);
+        const uid = cred.user.uid;
+        await signOut(secondaryAuth);
+        await deleteApp(secondaryApp).catch(() => {});
+        return { uid, authEmail: primaryAuthEmail };
+      } catch (err: any) {
+        if (err.code === 'auth/email-already-in-use') {
+          // 3. Allocate a new active credential slot linked to the user's RUT
+          const slotAuthEmail = `${cleanedDigits}-c${Date.now().toString(36)}@hospitalvillarrica.cl`;
+          const cred = await createUserWithEmailAndPassword(secondaryAuth, slotAuthEmail, targetPassword);
+          const uid = cred.user.uid;
+          await signOut(secondaryAuth);
+          await deleteApp(secondaryApp).catch(() => {});
+          return { uid, authEmail: slotAuthEmail };
+        }
+        throw err;
+      }
+    } catch (e) {
+      await deleteApp(secondaryApp).catch(() => {});
+      throw e;
+    }
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -150,40 +255,31 @@ export const MantenedorUsuariosView: React.FC = () => {
     }
 
     setSaving(true);
-    let secondaryApp: any = null;
     try {
-      // 2. Generar contraseña provisoria
-      const tempPass = `Villarrica-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-      // En servicios públicos de salud, varios funcionarios (ej: conductores o unidades)
-      // comparten el mismo correo de contacto (ej: movilizacion@redsalud.gob.cl).
-      // Como Firebase Auth exige un email único por cuenta, la credencial de autenticación
-      // se vincula de manera única al RUN institucional del funcionario, permitiendo
-      // que cada uno tenga su propia contraseña independiente sin conflictos.
-      const hasRealEmail = email.trim().includes('@');
-      const contactEmail = hasRealEmail ? email.trim().toLowerCase() : '';
-      const authEmail = `${cleanedDigits}@hospitalvillarrica.cl`;
+      // 2. Generar o usar contraseña definida por Administración / Transporte
+      const tempPass = customCreatePassword.trim()
+        ? customCreatePassword.trim()
+        : `Villarrica-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
-      let uid: string;
-
-      // 3. Crear cuenta en Firebase Auth usando una instancia secundaria aislada.
-      secondaryApp = getApps().find(a => a.name === 'AdminAuthHelper') 
-        || initializeApp(firebaseConfig, 'AdminAuthHelper');
-      const secondaryAuth = getAuth(secondaryApp);
-
-      try {
-        const credential = await createUserWithEmailAndPassword(secondaryAuth, authEmail, tempPass);
-        uid = credential.user.uid;
-      } catch (authErr: any) {
-        // En localhost para pruebas: si ya existe en Firebase Auth, permitir reutilizar el perfil
-        if (isLocalhost && authErr.code === 'auth/email-already-in-use') {
-          console.warn('[Modo Pruebas Localhost] Correo/RUT ya existe en Firebase Auth. Creando perfil en Firestore para pruebas.');
-          uid = `local-test-${cleanedDigits}-${Date.now().toString(36)}`;
-        } else {
-          throw authErr;
-        }
+      if (tempPass.length < 6) {
+        setErrorMsg('La contraseña debe tener al menos 6 caracteres.');
+        setSaving(false);
+        return;
       }
 
-      // 4. Enviar correo automático vía EmailJS con contraseña provisoria e instrucciones
+      const hasRealEmail = email.trim().includes('@');
+      const contactEmail = hasRealEmail ? email.trim().toLowerCase() : '';
+
+      // 3. Crear cuenta directamente en Firebase Auth
+      const { uid, authEmail } = await forceProvisionAuthPassword(cleanedDigits, tempPass);
+
+      // 4. Encriptar contraseña (AES-GCM) y generar hash SHA-256 para resguardo en colección `usuarios`
+      const [pHash, pEnc] = await Promise.all([
+        sha256Hash(tempPass),
+        encryptPassword(tempPass),
+      ]);
+
+      // 5. Enviar correo informativo vía EmailJS si tiene correo registrado (opcional y no bloqueante)
       if (hasRealEmail) {
         try {
           const roleLabel = rol === 'conductor' ? 'Conductor' : rol === 'tens' ? 'TENS' : rol === 'calidad' ? 'Encargada de Calidad' : 'Encargado Transporte';
@@ -196,26 +292,23 @@ export const MantenedorUsuariosView: React.FC = () => {
           });
           if (mailRes.success) {
             setEmailSentTo(contactEmail);
-          } else {
-            console.warn('[EmailJS] Advertencia:', mailRes.error);
           }
         } catch (mailErr) {
           console.warn('[EmailJS] Error al despachar correo:', mailErr);
         }
       }
 
-      await signOut(secondaryAuth);
-      await deleteApp(secondaryApp).catch(() => {});
-      secondaryApp = null;
-
-      // 5. Guardar perfil en Firestore
+      // 6. Guardar perfil completo con clave encriptada en colección `usuarios`
       const newUser: AppUser = {
         id: uid,
         nombre: normalizedNombre,
         rut: cleanRut,
         email: contactEmail || authEmail,
+        authEmail,
         rol,
         cargo: cargo.trim() || undefined,
+        passwordHash: pHash,
+        passwordEncrypted: pEnc,
         isTemporaryPassword: false,
         activo: true,
         eliminado: false,
@@ -224,20 +317,13 @@ export const MantenedorUsuariosView: React.FC = () => {
 
       await saveUsuario(newUser);
 
-      // 6. Vincular siempre RUT -> Email para inicio de sesión transparente con RUT
+      // 7. Vincular siempre RUT -> AuthEmail para inicio de sesión directo e infalible con RUT
       await saveRutLookup(cleanedDigits, authEmail, normalizedNombre);
 
       await loadUsuarios();
       setGeneratedPassword(tempPass);
     } catch (err: any) {
-      if (secondaryApp) {
-        await deleteApp(secondaryApp).catch(() => {});
-      }
-      if (err.code === 'auth/email-already-in-use') {
-        setErrorMsg('Este RUN o correo ya cuenta con registro en Firebase Auth. Si el funcionario ya estaba registrado, puedes encontrarlo en la nómina (o en la pestaña de Cuentas Eliminadas para reactivarlo) y usar "Modificar Rol / Credenciales" o "Reset Clave".');
-      } else {
-        setErrorMsg(err.message || 'Error al crear el usuario.');
-      }
+      setErrorMsg(err.message || 'Error al crear el usuario.');
     } finally {
       setSaving(false);
     }
@@ -301,38 +387,51 @@ export const MantenedorUsuariosView: React.FC = () => {
       const userDisplayEmail = hasRealEmail ? editEmail.trim().toLowerCase() : rutToAuthEmail(cleanRut);
 
       let newTempPass: string | null = null;
-      let isTemp = userToEdit.isTemporaryPassword;
+      let isTemp = false;
+      let finalUid = userToEdit.id;
+      let finalAuthEmail = userToEdit.authEmail || `${cleanedDigits}@hospitalvillarrica.cl`;
+      let newPasswordHash = userToEdit.passwordHash;
+      let newPasswordEncrypted = userToEdit.passwordEncrypted;
 
       if (editResetPassword) {
         newTempPass = editCustomPassword.trim() || `Villarrica-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-        isTemp = true;
+        if (newTempPass.length < 6) {
+          setEditError('La contraseña debe tener al menos 6 caracteres.');
+          setEditSaving(false);
+          return;
+        }
+        // Forzar cambio directo en Firebase Auth sin depender de enlaces por correo
+        const provisioned = await forceProvisionAuthPassword(cleanedDigits, newTempPass, userToEdit);
+        finalUid = provisioned.uid;
+        finalAuthEmail = provisioned.authEmail;
+        [newPasswordHash, newPasswordEncrypted] = await Promise.all([
+          sha256Hash(newTempPass),
+          encryptPassword(newTempPass),
+        ]);
+        isTemp = false;
       }
 
       const updatedUser: AppUser = {
         ...userToEdit,
+        id: finalUid,
         nombre: normalizedNombre,
         rut: cleanRut,
         email: userDisplayEmail,
+        authEmail: finalAuthEmail,
         rol: editRol,
         cargo: editCargo.trim() || undefined,
+        passwordHash: newPasswordHash,
+        passwordEncrypted: newPasswordEncrypted,
         isTemporaryPassword: isTemp,
       };
 
-      await saveUsuario(updatedUser);
+      await migrateUsuarioUid(userToEdit.id, updatedUser);
 
-      // Actualizar mapeo en rut_lookup de forma definitiva
-      await saveRutLookup(cleanedDigits, userDisplayEmail, normalizedNombre);
+      // Actualizar mapeo en rut_lookup apuntando siempre al authEmail activo en Firebase Auth
+      await saveRutLookup(cleanedDigits, finalAuthEmail, normalizedNombre);
 
-      // Si se solicitó nueva clave provisoria y el usuario tiene correo:
+      // Si se asignó nueva clave y el usuario tiene correo personal/institucional registrado, notificar por EmailJS
       if (newTempPass && hasRealEmail) {
-        // Enviar enlace oficial de Firebase Auth para restablecimiento seguro
-        try {
-          await sendPasswordResetEmail(auth, userDisplayEmail);
-        } catch (authResetErr) {
-          console.warn('[Firebase Auth] Advertencia al enviar reset email:', authResetErr);
-        }
-
-        // Despachar correo informativo vía EmailJS
         try {
           const roleLabels: Record<UserRole, string> = {
             conductor: 'Conductor',
@@ -342,7 +441,7 @@ export const MantenedorUsuariosView: React.FC = () => {
             admin: 'Administrador'
           };
           const mailRes = await sendWelcomeEmail({
-            to_name: editNombre.trim(),
+            to_name: normalizedNombre,
             to_email: userDisplayEmail,
             to_rut: cleanRut,
             temp_password: newTempPass,
@@ -370,33 +469,11 @@ export const MantenedorUsuariosView: React.FC = () => {
     }
   };
 
-  const handleResetPassword = async (u: AppUser) => {
-    const destinoEmail = u.email && u.email.includes('@') ? u.email : rutToAuthEmail(u.rut);
-    if (!window.confirm(`¿Enviar enlace oficial de restablecimiento de contraseña para ${u.nombre} (RUN: ${u.rut}) al correo ${destinoEmail}?`)) return;
-    try {
-      const cleanDigits = u.rut.replace(/[^0-9kK]/g, '').toLowerCase();
-      // Intentar resetear con el authEmail del RUN o con su correo registrado
-      let resetSent = false;
-      try {
-        await sendPasswordResetEmail(auth, `${cleanDigits}@hospitalvillarrica.cl`);
-        resetSent = true;
-      } catch {
-        if (u.email && u.email.includes('@')) {
-          await sendPasswordResetEmail(auth, u.email);
-          resetSent = true;
-        }
-      }
-
-      if (resetSent) {
-        await saveUsuario({ ...u, isTemporaryPassword: false });
-        await loadUsuarios();
-        alert(`✅ Enlace oficial de restablecimiento de contraseña generado para ${u.nombre}.\n\nEl funcionario podrá definir su nueva clave e ingresar directamente con su RUN al sistema.`);
-      } else {
-        alert('No se pudo enviar el enlace. Verifique las credenciales del usuario.');
-      }
-    } catch (err: any) {
-      alert(`Error al resetear contraseña: ${err.message}`);
-    }
+  const handleResetPassword = (u: AppUser) => {
+    handleOpenEditModal(u);
+    setEditResetPassword(true);
+    const currentDecrypted = decryptedPasswords[u.id] || '';
+    setEditCustomPassword(currentDecrypted || 'Minsal2026');
   };
 
   const handleToggleActivo = async (u: AppUser) => {
@@ -580,6 +657,7 @@ export const MantenedorUsuariosView: React.FC = () => {
               <tr>
                 <th className="py-3 px-4">Funcionario</th>
                 <th className="py-3 px-4">RUN</th>
+                <th className="py-3 px-4">Contraseña Activa (Encriptada)</th>
                 <th className="py-3 px-4">Correo</th>
                 <th className="py-3 px-4">Rol Asignado</th>
                 <th className="py-3 px-4">Estado</th>
@@ -589,14 +667,17 @@ export const MantenedorUsuariosView: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {filteredUsuarios.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400">
+                  <td colSpan={7} className="py-8 text-center text-slate-400">
                     {activeTab === 'activos' 
                       ? "No hay funcionarios registrados en la nómina activa." 
                       : "No hay registros de cuentas eliminadas."}
                   </td>
                 </tr>
               ) : (
-                filteredUsuarios.map(u => (
+                filteredUsuarios.map(u => {
+                  const plainPwd = decryptedPasswords[u.id] || '';
+                  const isPwdVisible = !!visiblePasswords[u.id];
+                  return (
                   <tr key={u.id} className="hover:bg-slate-50 transition-colors">
                     <td className="py-3.5 px-4 font-bold text-slate-800">
                       {formatProperName(u.nombre)}
@@ -608,6 +689,45 @@ export const MantenedorUsuariosView: React.FC = () => {
                       )}
                     </td>
                     <td className="py-3.5 px-4 font-mono font-semibold text-slate-700">{u.rut}</td>
+                    <td className="py-3.5 px-4">
+                      {plainPwd ? (
+                        <div className="inline-flex items-center gap-1.5 bg-slate-100/90 border border-slate-200 px-2.5 py-1 rounded-lg">
+                          <span className="font-mono font-bold text-slate-800 text-xs tracking-wide select-all">
+                            {isPwdVisible ? plainPwd : '••••••••••'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => toggleShowPassword(u.id)}
+                            className="p-0.5 text-slate-500 hover:text-indigo-600 transition-colors"
+                            title={isPwdVisible ? 'Ocultar contraseña' : 'Ver contraseña activa'}
+                          >
+                            {isPwdVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => copyRowPassword(u.id, plainPwd)}
+                            className="p-0.5 text-slate-500 hover:text-emerald-600 transition-colors"
+                            title="Copiar contraseña"
+                          >
+                            {copiedRowId === u.id ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleResetPassword(u)}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg transition-colors"
+                          title="Asignar una clave directa y visible para este funcionario"
+                        >
+                          <Key className="w-3 h-3" />
+                          <span>Sin registro (Asignar)</span>
+                        </button>
+                      )}
+                    </td>
                     <td className="py-3.5 px-4 text-slate-600">{u.email}</td>
                     <td className="py-3.5 px-4">{getRolBadge(u.rol)}</td>
                     <td className="py-3.5 px-4">
@@ -629,11 +749,6 @@ export const MantenedorUsuariosView: React.FC = () => {
                           }`}>
                             {u.activo ? 'Activo' : 'Desactivado'}
                           </span>
-                          {u.isTemporaryPassword && (
-                            <span className="block text-[10px] text-amber-600 font-semibold mt-0.5">
-                              Clave Provisoria
-                            </span>
-                          )}
                         </div>
                       )}
                     </td>
@@ -654,11 +769,11 @@ export const MantenedorUsuariosView: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => handleResetPassword(u)}
-                            title="Generar nueva clave provisoria"
-                            className="px-2.5 py-1 text-xs font-semibold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors inline-flex items-center gap-1"
+                            title="Cambiar o forzar contraseña directamente en el aplicativo"
+                            className="px-2.5 py-1 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors inline-flex items-center gap-1 shadow-sm"
                           >
-                            <Key className="w-3 h-3" />
-                            <span>Reset Clave</span>
+                            <Key className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Cambiar Clave</span>
                           </button>
 
                           <button
@@ -696,7 +811,8 @@ export const MantenedorUsuariosView: React.FC = () => {
                       )}
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -882,21 +998,21 @@ export const MantenedorUsuariosView: React.FC = () => {
                       className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300"
                     />
                     <span className="text-xs font-bold text-slate-700">
-                      Modificar / Asignar nueva clave provisoria de acceso
+                      Modificar / Asignar nueva contraseña directa en el aplicativo
                     </span>
                   </label>
 
                   {editResetPassword && (
-                    <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 space-y-2">
-                      <p className="text-[11px] text-amber-800">
-                        Se forzará el cambio de clave en el próximo inicio de sesión. Si dejas el campo vacío, se generará automáticamente una clave segura.
+                    <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-200 space-y-2">
+                      <p className="text-[11px] text-indigo-900">
+                        La contraseña se aplicará de inmediato (sin requerir enlaces de correo ni bloqueos) y quedará resguardada con encriptación AES-256 en la colección <code className="font-mono font-bold">usuarios</code>, visible en tiempo real para Administración y Jefe de Transporte.
                       </p>
                       <input
                         type="text"
                         value={editCustomPassword}
                         onChange={e => setEditCustomPassword(e.target.value)}
-                        placeholder="Opcional: Escribir clave personalizada (mínimo 6 caracteres)"
-                        className="w-full px-3 py-1.5 rounded-lg border border-amber-300 text-xs font-mono bg-white"
+                        placeholder="Escribir contraseña (ej: Minsal2026) o dejar vacío para autogenerar"
+                        className="w-full px-3 py-1.5 rounded-lg border border-indigo-300 text-xs font-mono font-bold bg-white"
                       />
                     </div>
                   )}
@@ -1185,8 +1301,21 @@ export const MantenedorUsuariosView: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-[11px] text-amber-800">
-                  Se generará automáticamente una <strong>contraseña provisoria</strong> y el usuario deberá definir una contraseña propia y segura en su primer acceso.
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Contraseña de Acceso <span className="text-slate-400 font-normal lowercase">(opcional: escribir o dejar vacío para autogenerar)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={customCreatePassword}
+                    onChange={e => setCustomCreatePassword(e.target.value)}
+                    placeholder="Ej: Minsal2026 (si se deja vacío se autogenera)"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono font-bold"
+                  />
+                </div>
+
+                <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-200 text-[11px] text-indigo-900">
+                  La contraseña quedará activa de inmediato y almacenada con <strong>encriptación AES-256</strong> en la colección <code className="font-mono font-bold">usuarios</code>, visible en tiempo real para Administración y Jefe de Transporte.
                 </div>
 
                 <div className="flex items-center justify-end gap-2 pt-2">

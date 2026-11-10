@@ -5,9 +5,11 @@ export interface AppUser {
   nombre: string;
   rut: string;
   email: string;
+  authEmail?: string; // Current active Firebase Auth email identifier
   rol: UserRole;
   cargo?: string;
-  passwordHash?: string; // Deprecated/legacy: credentials live in Firebase Auth only
+  passwordHash?: string; // SHA-256 hash of active password for institutional verification
+  passwordEncrypted?: string; // AES-GCM encrypted password visible to Admin / Transporte
   isTemporaryPassword?: boolean;
   activo: boolean;
   eliminado?: boolean;

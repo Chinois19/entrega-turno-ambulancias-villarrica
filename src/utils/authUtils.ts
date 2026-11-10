@@ -15,6 +15,80 @@ export async function sha256Hash(message: string): Promise<string> {
   return hashHex;
 }
 
+// ─── Institutional AES-256-GCM Credential Cipher ──────────────────────────────
+// Encrypts user passwords before storing in Firestore so they are never stored
+// in raw plaintext, while allowing Admin and Jefe de Transporte to view/assist
+// staff in real time.
+const INSTITUTIONAL_SECRET = 'HVillarrica-SSASUR-2026-KeyVault-9918273645!';
+
+async function getAesKey(): Promise<CryptoKey> {
+  const enc = new TextEncoder().encode(INSTITUTIONAL_SECRET);
+  const keyMaterial = await crypto.subtle.digest('SHA-256', enc);
+  return crypto.subtle.importKey(
+    'raw',
+    keyMaterial,
+    { name: 'AES-GCM' },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+export async function encryptPassword(plainPassword: string): Promise<string> {
+  if (!plainPassword) return '';
+  try {
+    const key = await getAesKey();
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encoded = new TextEncoder().encode(plainPassword);
+    const cipherBuffer = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv },
+      key,
+      encoded
+    );
+    const cipherBytes = new Uint8Array(cipherBuffer);
+    const combined = new Uint8Array(iv.length + cipherBytes.length);
+    combined.set(iv, 0);
+    combined.set(cipherBytes, iv.length);
+    // Base64 encode
+    let binary = '';
+    for (let i = 0; i < combined.byteLength; i++) {
+      binary += String.fromCharCode(combined[i]);
+    }
+    return `AES:${btoa(binary)}`;
+  } catch (e) {
+    console.warn('Encryption fallback:', e);
+    return `B64:${btoa(unescape(encodeURIComponent(plainPassword)))}`;
+  }
+}
+
+export async function decryptPassword(encryptedStr?: string): Promise<string> {
+  if (!encryptedStr) return '';
+  try {
+    if (encryptedStr.startsWith('AES:')) {
+      const b64 = encryptedStr.slice(4);
+      const binary = atob(b64);
+      const combined = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        combined[i] = binary.charCodeAt(i);
+      }
+      const iv = combined.slice(0, 12);
+      const cipherBytes = combined.slice(12);
+      const key = await getAesKey();
+      const plainBuffer = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        key,
+        cipherBytes
+      );
+      return new TextDecoder().decode(plainBuffer);
+    }
+    if (encryptedStr.startsWith('B64:')) {
+      return decodeURIComponent(escape(atob(encryptedStr.slice(4))));
+    }
+    return encryptedStr;
+  } catch {
+    return '';
+  }
+}
+
 /**
  * Generates a secure random temporary password (e.g., Villarrica2026-X9Z)
  */

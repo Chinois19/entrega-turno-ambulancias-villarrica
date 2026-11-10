@@ -21,13 +21,15 @@ import {
   Menu, 
   X,
   FileText,
-  FileDown
+  FileDown,
+  KeyRound
 } from 'lucide-react';
 
 export function App() {
   const { currentUser, loading, logout, hasRole } = useAuth();
   const [activeTab, setActiveTab] = useState<string>('default');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
 
   // Mientras Firebase verifica la sesión activa (al hacer F5 o recargar)
   if (loading) {
@@ -66,8 +68,11 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
-      {/* Obligatory change password modal for users with temporary password */}
-      <ChangePasswordModal />
+      {/* Password modal: forced when temporary or opened voluntarily */}
+      <ChangePasswordModal
+        isOpen={passwordModalOpen}
+        onClose={() => setPasswordModalOpen(false)}
+      />
 
       {/* Top Navbar */}
       <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40 shadow-lg">
@@ -194,13 +199,22 @@ export function App() {
           </nav>
 
           {/* User profile & Logout */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <div className="hidden sm:block text-right">
               <span className="block text-xs font-bold text-slate-200">{currentUser.nombre}</span>
               <span className="block text-[10px] text-sky-400 capitalize">
                 Rol: {currentUser.rol} {currentUser.cargo ? `• ${currentUser.cargo}` : ''}
               </span>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setPasswordModalOpen(true)}
+              title="Cambiar Mi Contraseña"
+              className="p-2 rounded-xl bg-slate-800 hover:bg-sky-500/20 text-slate-300 hover:text-sky-400 transition-colors border border-slate-700"
+            >
+              <KeyRound className="w-4 h-4" />
+            </button>
 
             <button
               type="button"

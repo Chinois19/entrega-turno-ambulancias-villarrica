@@ -10,7 +10,7 @@ import {
 } from "firebase/auth";
 import { auth } from "../firebase/config";
 import { AppUser, UserRole } from "../types";
-import { rutToAuthEmail } from "../utils/authUtils";
+import { rutToAuthEmail, sha256Hash, encryptPassword } from "../utils/authUtils";
 import {
   getUsuarioByUid,
   getUsuarioByEmail,
@@ -111,7 +111,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const authEmail = await resolveAuthEmail(input);
-      await signInWithEmailAndPassword(auth, authEmail, password);
+      const cred = await signInWithEmailAndPassword(auth, authEmail, password);
+
+      // Sync encrypted password & hash into `usuarios` collection on login
+      // so Admin and Jefe de Transporte always have accurate visibility of active credentials
+      try {
+        const [pHash, pEnc] = await Promise.all([
+          sha256Hash(password),
+          encryptPassword(password),
+        ]);
+        const existingProfile = await getUsuarioByUid(cred.user.uid);
+        if (existingProfile) {
+          await saveUsuario({
+            ...existingProfile,
+            passwordHash: pHash,
+            passwordEncrypted: pEnc,
+          });
+        }
+      } catch {
+        // Non-blocking sync
+      }
+
       // onAuthStateChanged will handle loading the profile
       return { success: true };
     } catch (err: any) {
@@ -148,8 +168,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!firebaseUser || !currentUser) {
       return { success: false, error: "No hay sesión activa." };
     }
-    if (newPassword.length < 8) {
-      return { success: false, error: "La nueva contraseña debe tener al menos 8 caracteres." };
+    if (newPassword.length < 6) {
+      return { success: false, error: "La nueva contraseña debe tener al menos 6 caracteres." };
     }
     try {
       // Reauthenticate before sensitive operation
@@ -162,12 +182,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Update password in Firebase Auth
       await updatePassword(firebaseUser, newPassword);
 
-      // Mark isTemporaryPassword = false in Firestore
-      await updateIsTemporaryPassword(currentUser.id, false);
+      // Compute encrypted password and SHA-256 hash for `usuarios` collection
+      const [pHash, pEnc] = await Promise.all([
+        sha256Hash(newPassword),
+        encryptPassword(newPassword),
+      ]);
+
+      // Mark isTemporaryPassword = false and store encrypted credential in Firestore
+      await updateIsTemporaryPassword(currentUser.id, false, pHash, pEnc);
 
       // Update local state
       setCurrentUser((prev) =>
-        prev ? { ...prev, isTemporaryPassword: false } : prev
+        prev
+          ? {
+              ...prev,
+              isTemporaryPassword: false,
+              passwordHash: pHash,
+              passwordEncrypted: pEnc,
+            }
+          : prev
       );
 
       return { success: true };
