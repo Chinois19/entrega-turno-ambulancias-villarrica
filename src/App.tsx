@@ -76,38 +76,38 @@ export function App() {
 
       {/* Top Navbar */}
       <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40 shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between min-h-[5.25rem] py-3 gap-4">
           {/* Logo & Title */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-600 to-cyan-500 flex items-center justify-center text-white shadow-md">
+          <div className="flex items-center gap-3.5 flex-shrink-0">
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-sky-600 to-cyan-500 flex items-center justify-center text-white shadow-md flex-shrink-0">
               <Ambulance className="w-6 h-6" />
             </div>
-            <div>
+            <div className="space-y-0.5">
               <div className="flex items-center gap-2">
-                <span className="font-black text-sm tracking-tight">HOSPITAL DE VILLARRICA</span>
-                <span className="text-[10px] uppercase font-bold bg-sky-500/20 text-sky-300 px-2 py-0.5 rounded-full border border-sky-400/20">
+                <span className="font-black text-sm tracking-tight whitespace-nowrap">HOSPITAL DE VILLARRICA</span>
+                <span className="text-[10px] uppercase font-bold bg-sky-500/20 text-sky-300 px-2 py-0.5 rounded-full border border-sky-400/20 whitespace-nowrap">
                   Acreditación
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-slate-400 leading-snug">
                 Sistema Oficial de Entrega de Turno de Ambulancias
               </p>
             </div>
           </div>
 
           {/* Desktop Navigation */}
-          <nav className="hidden lg:flex items-center gap-1">
+          <nav className="hidden lg:flex items-center gap-1.5 flex-wrap justify-center">
             {canSeeConductor && (
               <button
                 type="button"
                 onClick={() => setActiveTab('conductor')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
                   currentTab === 'conductor' 
                     ? 'bg-sky-600 text-white shadow-md' 
                     : 'text-slate-300 hover:text-white hover:bg-slate-800'
                 }`}
               >
-                <Truck className="w-4 h-4" />
+                <Truck className="w-4 h-4 flex-shrink-0" />
                 <span>Turno Conductor</span>
               </button>
             )}
@@ -116,13 +116,13 @@ export function App() {
               <button
                 type="button"
                 onClick={() => setActiveTab('tens')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
                   currentTab === 'tens' 
                     ? 'bg-teal-600 text-white shadow-md' 
                     : 'text-slate-300 hover:text-white hover:bg-slate-800'
                 }`}
               >
-                <HeartPulse className="w-4 h-4" />
+                <HeartPulse className="w-4 h-4 flex-shrink-0" />
                 <span>Turno TENS (Cabina)</span>
               </button>
             )}
@@ -132,52 +132,52 @@ export function App() {
                 <button
                   type="button"
                   onClick={() => setActiveTab('dashboard')}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                  className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
                     currentTab === 'dashboard' 
                       ? 'bg-indigo-600 text-white shadow-md' 
                       : 'text-slate-300 hover:text-white hover:bg-slate-800'
                   }`}
                 >
-                  <BarChart3 className="w-4 h-4" />
+                  <BarChart3 className="w-4 h-4 flex-shrink-0" />
                   <span>Auditoría & Turnos</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setActiveTab('novedades')}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                  className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
                     currentTab === 'novedades' 
                       ? 'bg-amber-600 text-white shadow-md' 
                       : 'text-slate-300 hover:text-white hover:bg-slate-800'
                   }`}
                 >
-                  <AlertTriangle className="w-4 h-4" />
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
                   <span>Novedades Calidad</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setActiveTab('moviles')}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                  className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
                     currentTab === 'moviles' 
                       ? 'bg-blue-600 text-white shadow-md' 
                       : 'text-slate-300 hover:text-white hover:bg-slate-800'
                   }`}
                 >
-                  <Ambulance className="w-4 h-4" />
+                  <Ambulance className="w-4 h-4 flex-shrink-0" />
                   <span>Flota Móviles</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setActiveTab('usuarios')}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                  className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
                     currentTab === 'usuarios' 
                       ? 'bg-purple-600 text-white shadow-md' 
                       : 'text-slate-300 hover:text-white hover:bg-slate-800'
                   }`}
                 >
-                  <Users className="w-4 h-4" />
+                  <Users className="w-4 h-4 flex-shrink-0" />
                   <span>Usuarios</span>
                 </button>
               </>
@@ -187,22 +187,22 @@ export function App() {
             <button
               type="button"
               onClick={() => setActiveTab('contingencia')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
                 currentTab === 'contingencia' 
                   ? 'bg-amber-600 text-white shadow-md' 
                   : 'text-amber-300 hover:text-white hover:bg-slate-800'
               }`}
             >
-              <FileDown className="w-4 h-4 text-amber-400" />
+              <FileDown className="w-4 h-4 text-amber-400 flex-shrink-0" />
               <span>Documentos Contingencia</span>
             </button>
           </nav>
 
           {/* User profile & Logout */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="hidden sm:block text-right">
-              <span className="block text-xs font-bold text-slate-200">{currentUser.nombre}</span>
-              <span className="block text-[10px] text-sky-400 capitalize">
+          <div className="flex items-center gap-2.5 sm:gap-3 flex-shrink-0">
+            <div className="hidden sm:block text-right space-y-0.5 py-1">
+              <span className="block text-xs font-bold text-slate-100 leading-tight whitespace-nowrap">{currentUser.nombre}</span>
+              <span className="block text-[11px] text-sky-400 capitalize leading-tight">
                 Rol: {currentUser.rol} {currentUser.cargo ? `• ${currentUser.cargo}` : ''}
               </span>
             </div>
@@ -211,7 +211,7 @@ export function App() {
               type="button"
               onClick={() => setPasswordModalOpen(true)}
               title="Cambiar Mi Contraseña"
-              className="p-2 rounded-xl bg-slate-800 hover:bg-sky-500/20 text-slate-300 hover:text-sky-400 transition-colors border border-slate-700"
+              className="p-2.5 rounded-xl bg-slate-800 hover:bg-sky-500/20 text-slate-300 hover:text-sky-400 transition-colors border border-slate-700"
             >
               <KeyRound className="w-4 h-4" />
             </button>
@@ -220,7 +220,7 @@ export function App() {
               type="button"
               onClick={logout}
               title="Cerrar Sesión"
-              className="p-2 rounded-xl bg-slate-800 hover:bg-red-500/20 text-slate-300 hover:text-red-400 transition-colors border border-slate-700"
+              className="p-2.5 rounded-xl bg-slate-800 hover:bg-red-500/20 text-slate-300 hover:text-red-400 transition-colors border border-slate-700"
             >
               <LogOut className="w-4 h-4" />
             </button>
